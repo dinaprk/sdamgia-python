@@ -1,0 +1,12 @@
+venv/
+*.html
+*.db
+*.svg
+*.png
+*.json
+cookies_and_headers.py
+bloat_from_experiments/
+images/
+.idea
+__pycache__
+scrapper/images_tests.py

@@ -1,1 +1,1 @@
-from .main import SdamGIA
+from .__main__ import SdamGIA

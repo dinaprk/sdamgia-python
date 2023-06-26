@@ -4,6 +4,7 @@ import json
 import os
 import subprocess
 from time import sleep
+from typing import List
 
 import PIL
 import aiohttp
@@ -11,50 +12,30 @@ import cairosvg
 from PIL import Image
 from bs4 import BeautifulSoup
 import requests
+import unicodedata
 
 from pix2tex.cli import LatexOCR
 
-from exceptions import IncorrectGiaTypeException, ProbBlockIsNoneException
+from sdamgia.exceptions import IncorrectGiaTypeException, ProbBlockIsNoneException
 
 
 class SdamGIA:
     def __init__(self, gia_type: str = 'oge'):
-        if gia_type.lower() not in ['oge', 'ege']:
+        gia_type = gia_type.lower()
+        if gia_type not in ['oge', 'ege']:
             raise IncorrectGiaTypeException(gia_type)
 
         self.GIA_TYPE = gia_type
 
         self.BASE_DOMAIN = 'sdamgia.ru'
 
+        subjects = ['math', 'phys', 'inf', 'rus', 'bio', 'en', 'chem',
+                    'geo', 'soc', 'de', 'rf', 'lit', 'sp', 'hist']
+        if gia_type == 'ege':
+            subjects.append('mathb')
         self.SUBJECT_BASE_URL = {
-            'math': f'https://math-{gia_type}.{self.BASE_DOMAIN}', 'mathb': f'https://mathb-ege.{self.BASE_DOMAIN}',
-            'phys': f'https://phys-{gia_type}.{self.BASE_DOMAIN}',
-            'inf': f'https://inf-{gia_type}.{self.BASE_DOMAIN}',
-            'rus': f'https://rus-{gia_type}.{self.BASE_DOMAIN}',
-            'bio': f'https://bio-{gia_type}.{self.BASE_DOMAIN}',
-            'en': f'https://en-{gia_type}.{self.BASE_DOMAIN}',
-            'chem': f'https://chem-{gia_type}.{self.BASE_DOMAIN}',
-            'geo': f'https://geo-{gia_type}.{self.BASE_DOMAIN}',
-            'soc': f'https://soc-{gia_type}.{self.BASE_DOMAIN}',
-            'de': f'https://de-{gia_type}.{self.BASE_DOMAIN}',
-            'fr': f'https://fr-{gia_type}.{self.BASE_DOMAIN}',
-            'lit': f'https://lit-{gia_type}.{self.BASE_DOMAIN}',
-            'sp': f'https://sp-{gia_type}.{self.BASE_DOMAIN}',
-            'hist': f'https://hist-{gia_type}.{self.BASE_DOMAIN}',
+            subject: f"https://{subject}-{gia_type}.{self.BASE_DOMAIN}" for subject in subjects
         }
-        # self.tesseract_src = 'tesseract'
-
-        # proxy_url = "85.26.146.169:80"
-        # proxy_host, proxy_port = proxy_url.split(':')
-
-        # Set up the proxy information in the requests library format
-        # self.proxies = {
-        #     'http': f'http://{proxy_host}:{proxy_port}',
-        #     'https': f'http://{proxy_host}:{proxy_port}'
-        # }
-
-    def __replace_text_with_symbols(self, text: str):
-        return text.replace(r'\angle', '∠').replace('градусов', '°').replace('плюс', '+').replace('−', '-')
 
     def get_problem_by_id(self, subject, id):
         """
@@ -66,7 +47,7 @@ class SdamGIA:
         :param id: Идентификатор задачи
         :type subject: str
         """
-        print(f'{self.SUBJECT_BASE_URL[subject]}/problem?id={id}')
+        # print(f'{self.SUBJECT_BASE_URL[subject]}/problem?id={id}')
         doujin_page = requests.get(
             f'{self.SUBJECT_BASE_URL[subject]}/problem?id={id}')
         soup = BeautifulSoup(doujin_page.text.replace("\xa0", " "), 'html.parser')
@@ -155,10 +136,9 @@ class SdamGIA:
         return {'id': ID, 'topic': TOPIC_ID, 'condition_html': condition_html, "solution_html": solution_html,
                 'condition': CONDITION, 'solution': SOLUTION, 'answer': ANSWER, 'analogs': ANALOGS, 'url': URL}
 
-    async def get_problem_latex_by_id(self, subject: str, id: str, session: aiohttp.ClientSession):
-        # print(f'{self._SUBJECT_BASE_URL[subject]}/problem?id={id}')
-        async with session.get(f'{self.SUBJECT_BASE_URL[subject]}/problem?id={id}') as page_html:
-            soup = BeautifulSoup((await page_html.text()).replace("\xa0", " "),
+    async def get_problem_latex_by_id(self, subject: str, problem_id: str, session: aiohttp.ClientSession):
+        async with session.get(f'{self.SUBJECT_BASE_URL[subject]}/problem?id={problem_id}') as page_html:
+            soup = BeautifulSoup((await page_html.text()).replace(u"\xa0", " "),
                                  'lxml')  # .replace("\xa0", " "), 'html.parser')
 
         prob_block = soup.find('div', class_='prob_maindiv')
@@ -181,10 +161,9 @@ class SdamGIA:
             if not 'sdamgia.ru' in i['src']:
                 i['src'] = self.SUBJECT_BASE_URL[subject] + i['src']
 
-        problem_url = f'{self.SUBJECT_BASE_URL[subject]}/problem?id={id}'
+        problem_url = f'{self.SUBJECT_BASE_URL[subject]}/problem?id={problem_id}'
         topic_id = ' '.join(prob_block.find(
             'span', {'class': 'prob_nums'}).text.split()[1:][:-2])
-        problem_id = id
 
         condition, solution, answer, problem_analogs = {}, {}, '', []
         try:
@@ -237,6 +216,11 @@ class SdamGIA:
         except AttributeError:
             pass
 
+        condition['text'] = unicodedata.normalize('NFKC', condition['text'])
+        solution['text'] = unicodedata.normalize('NFKC', solution['text'])
+
+        problem_analogs = sorted([i for i in problem_analogs if all(j.isdigit() for j in i)])
+        
         return {'condition': condition, 'solution': solution, 'answer': answer, 'problem_id': problem_id,
                 'topic_id': topic_id, 'analogs': problem_analogs, 'url': problem_url, 'subject': subject,
                 "gia_type": self.GIA_TYPE}
@@ -268,6 +252,74 @@ class SdamGIA:
         tex_dict = {images_data[i][0]: string_tex_list[i] for i in range(len(images_data))}
         return tex_dict
 
+    async def scrap_problem_no_ocr_by_id(self, subject: str, problem_id: str, session: aiohttp.ClientSession) -> dict:
+        async with session.get(f'{self.SUBJECT_BASE_URL[subject]}/problem?id={problem_id}') as page_html:
+            soup = BeautifulSoup((await page_html.text()).replace(u"\xa0", " "),
+                                 'lxml')  # .replace("\xa0", " "), 'html.parser')
+
+        prob_block = soup.find('div', class_='prob_maindiv')
+        # print(probBlock)
+        if prob_block is None:
+            raise ProbBlockIsNoneException
+
+        for i in prob_block.find_all('img'):
+            if not 'sdamgia.ru' in i['src']:
+                i['src'] = self.SUBJECT_BASE_URL[subject] + i['src']
+
+        problem_url = f'{self.SUBJECT_BASE_URL[subject]}/problem?id={problem_id}'
+        topic_id = ' '.join(prob_block.find(
+            'span', {'class': 'prob_nums'}).text.split()[1:][:-2])
+
+        condition, solution, answer, problem_analogs = {}, {}, '', []
+        try:
+            condition_element = soup.find_all('div', {'class': 'pbody'})[0]
+
+            condition_html = str(condition_element)
+
+            # condition_element = BeautifulSoup(''.join([str(i) for i in condition_element]), 'lxml')
+            condition_image_links = [i.get('src') for i in condition_element.find_all('img', class_='tex')]
+
+            condition = {'text': '',
+                         'html': condition_html,
+                         'images': condition_image_links + [i.get('src') for i in condition_element.find_all('img')]
+                         }
+        except IndexError:
+            pass
+
+        try:
+            solution_element = prob_block.find('div', class_='solution')
+            if solution_element is None:
+                solution_element = prob_block.find_all('div', class_='pbody')[1]
+
+            solution_html = str(solution_element)
+
+            solution_image_links = [i.get('src') for i in solution_element.find_all('img', class_='tex')]
+
+            solution = {'text': '',
+                        'html': solution_html,
+                        'images': solution_image_links + [i.get('src') for i in solution_element.find_all('img')]
+                        }
+            # SOLUTION['text'] = text
+        except IndexError:
+            pass
+        except AttributeError:
+            pass
+
+        try:
+            answer = prob_block.find(
+                'div', {'class': 'answer'}).text.replace('Ответ: ', '')
+        except IndexError:
+            pass
+        except AttributeError:
+            pass
+
+        problem_analogs = [i.get('href').replace("/problem?id=", "") for i in (prob_block.find_all('div', class_="minor")[0]).find_all('a')
+                           if problem_id not in i.get('href')]
+        problem_analogs = sorted([i for i in problem_analogs if all(j.isdigit() for j in i)])
+        return {'problem_id': problem_id, 'subject': subject, 'condition': condition, 'solution': solution,
+                'answer': answer, 'analogs': problem_analogs, 'topic_id': topic_id, 'url': problem_url,
+                "gia_type": self.GIA_TYPE}
+
     def search(self, subject, request, page=1):
         """
         Поиск задач по запросу
@@ -286,39 +338,41 @@ class SdamGIA:
         soup = BeautifulSoup(doujin_page.content, 'html.parser')
         return [i.text.split()[-1] for i in soup.find_all('span', {'class': 'prob_nums'})]
 
-    def get_test_by_id(self, subject, testid):
+    def get_test_by_id(self, subject, test_id):
         """
         Получение списка задач, включенных в тест
 
         :param subject: Наименование предмета
         :type subject: str
 
-        :param testid: Идентификатор теста
-        :type testid: str
+        :param test_id: Идентификатор теста
+        :type test_id: str
         """
         doujin_page = requests.get(
-            f'{self.SUBJECT_BASE_URL[subject]}/test?id={testid}')
+            f'{self.SUBJECT_BASE_URL[subject]}/test?id={test_id}')
         soup = BeautifulSoup(doujin_page.content, 'html.parser')
         return [i.text.split()[-1] for i in soup.find_all('span', {'class': 'prob_nums'})]
 
-    def get_category_by_id(self, subject, categoryid, page=1):
-        """
-        Получение списка задач, включенных в категорию
+    async def get_theme_by_id(self, theme_id: str, session: aiohttp.ClientSession) -> List[str]:
+        global total_request_count
+        params = {
+            'theme': theme_id,
+            "page": 1
+        }
 
-        :param subject: Наименование предмета
-        :type subject: str
-
-        :param categoryid: Идентификатор категории
-        :type categoryid: str
-
-        :param page: Номер страницы поиска
-        :type page: int
-        """
-
-        doujin_page = requests.get(
-            f'{self.SUBJECT_BASE_URL[subject]}/test?&filter=all&theme={categoryid}&page={page}')
-        soup = BeautifulSoup(doujin_page.content, 'html.parser')
-        return [i.text.split()[-1] for i in soup.find_all('span', {'class': 'prob_nums'})]
+        problem_ids = []
+        while True:
+            logging.info(f'Getting theme {theme_id}, page={params["page"]}')
+            total_request_count += 1
+            async with session.get(urljoin(base_url, '/test'), params=params) as response:
+                soup = BeautifulSoup(await response.text(), "html.parser")
+                ids = soup.find_all('span', class_='prob_nums')
+                if not ids:
+                    break
+                ids = [i.find('a').text for i in ids]
+                problem_ids.extend(ids)
+            params['page'] += 1
+        return problem_ids
 
     def get_catalog(self, subject):
         """
@@ -367,60 +421,22 @@ class SdamGIA:
 
         return CATALOG
 
-    def get_fipi_catalog(self, subject):
-        """
-        Получение каталога заданий для определенного предмета
-
-        :param subject: Наименование предмета
-        :type subject: str
-        """
-
-        doujin_page = requests.get(
-            f'{self.SUBJECT_BASE_URL[subject]}/prob_catalog')
-        soup = BeautifulSoup(doujin_page.content, 'html.parser')
-        catalog = []
-        CATALOG = []
-
-        for i in soup.find_all('div', {'class': 'cat_category'}):
-            try:
-                i['data-id']
-            except:
-                catalog.append(i)
-
-        for topic in catalog[1:]:
-            TOPIC_NAME = topic.find(
-                'b', {'class': 'cat_name'}).text.split('. ')[1]
-            TOPIC_ID = topic.find(
-                'b', {'class': 'cat_name'}).text.split('. ')[0]
-            if TOPIC_ID[0] == ' ':
-                TOPIC_ID = TOPIC_ID[2:]
-            if TOPIC_ID.find('Задания ') == 0:
-                TOPIC_ID = TOPIC_ID.replace('Задания ', '')
-
-            CATALOG.append(
-                dict(
-                    topic_id=TOPIC_ID,
-                    topic_name=TOPIC_NAME,
-                    categories=[
-                        dict(
-                            category_id=i['data-id'],
-                            category_name=i.find(
-                                'a', {'class': 'cat_name'}).text.replace('(банк ФИПИ)', '').strip()
-                        )
-                        for i in
-                        topic.find('div', {'class': 'cat_children'}).find_all('div', {'class': 'cat_category'}) if
-                        "(банк ФИПИ)" in i.text]
-                )
-            )
-
-        return CATALOG
-
-    def get_category_problems(self, subject, categoty_id):
-        response = requests.get(f'{self.SUBJECT_BASE_URL[subject]}/test?filter=all&category_id={categoty_id}')
-
-        soup = BeautifulSoup(response.text, 'html.parser')
-        problem_ids = [int(i.find('a').get('href').replace('/problem?id=', '')) for i in
-                       soup.find_all('span', class_='prob_nums')]
+    def get_category_problems(self, subject: str, category_id: str | int) -> List[str]:
+        params = {
+            'filter': 'all',
+            'category_id': category_id,
+            'page': 1
+        }
+        problem_ids = []
+        while True:
+            response = requests.get(f'{self.SUBJECT_BASE_URL[subject]}/test', params=params)
+            soup = BeautifulSoup(response.text, 'html.parser')
+            ids = [int(i.find('a').get('href').replace('/problem?id=', '')) for i in
+                           soup.find_all('span', class_='prob_nums')]
+            if not ids:
+                break
+            problem_ids.extend(ids)
+            params['page'] += 1
         return problem_ids
 
     def generate_test(self, subject, problems=None):
@@ -547,25 +563,20 @@ def create_pdf_from_problem_data(data: dict):
     #                         stdin=ps.stdout)
 
 
-async def main():
+async def test():
+    # import socket
+    # conn = aiohttp.TCPConnector(
+    #     family=socket.AF_INET
+    # )
+    # async with aiohttp.ClientSession(connector=conn) as session:
+
     async with aiohttp.ClientSession() as session:
-        # image = await sdamgia.get_image_from_url('https://oge.sdamgia.ru/formula/svg/9f/9f566993380f9ec1cf063c2acb4d3d98.svg',
-        #                            session)
-        # image.show()
-        subject = 'math'
-        id = '311309'
-        data = (await sdamgia.get_problem_latex_by_id(subject, id, session))
+        sdamgia = SdamGIA(gia_type='ege')
+        subject = 'inf'
+        id = '35914'
+        data = (await sdamgia.scrap_problem_no_ocr_by_id(subject, id, session))
         print(json.dumps(data, indent=4, ensure_ascii=False))
-        # create_pdf_from_problem_data(data)
-        # print(data['condition']['text'])
-        # print(data['solution']['text'])
 
 
 if __name__ == '__main__':
-    sdamgia = SdamGIA()
-    # subject = 'math'
-    # id = '642419'
-    asyncio.run(main())
-    # data = sdamgia.get_problem_by_id(subject, id)
-    # print(json.dumps(data, indent=4, ensure_ascii=False))
-    # make_problem_pdf_from_data(data)
+    asyncio.run(test())
