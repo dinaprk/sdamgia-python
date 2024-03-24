@@ -35,6 +35,7 @@ ignore = [
 ]
 
 [tool.mypy]
+strict = true
 exclude = [
     ".git",
     ".venv",
@@ -45,3 +46,8 @@ exclude = [
     "dist",
     "scripts",
 ]
+
+[[tool.mypy.overrides]]
+module = "pix2tex.*,cairosvg.*"
+ignore_missing_imports = true
+
