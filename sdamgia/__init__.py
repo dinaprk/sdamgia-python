@@ -1,1 +1,13 @@
-from .__main__ import SdamGIA
+from .__main__ import (
+    SdamGIA,
+    create_pdf_from_problem_data,
+    make_pdf_from_html,
+    make_problem_pdf_from_data,
+)
+
+__all__ = [
+    "SdamGIA",
+    "make_pdf_from_html",
+    "make_problem_pdf_from_data",
+    "create_pdf_from_problem_data",
+]

@@ -19,6 +19,7 @@ select = [
     "F", # pyflakes
     "I", # isort
     "N", # pep8-naming
+    "S", # flake8-bandit
     "C4", # flake8-comprehensions
     "UP", # pyupgrade
     "PLC", # pylint conventions
@@ -27,6 +28,10 @@ select = [
     "RET", # flake8-return
     "YTT", # flake8-2020
     "DTZ", # flake8-datetimez
+]
+ignore = [
+    "S113", # request-without-timeout
+    "S603", # subprocess-without-shell-equals-true
 ]
 
 [tool.mypy]

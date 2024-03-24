@@ -4,28 +4,26 @@ import json
 import logging
 import os
 import subprocess
+import unicodedata
 from time import sleep
-from typing import List
 from urllib.parse import urljoin
 
-import PIL
 import aiohttp
 import cairosvg
-from PIL import Image
-from bs4 import BeautifulSoup
+import PIL
 import requests
-import unicodedata
+from bs4 import BeautifulSoup
+from PIL import Image
 
 from pix2tex.cli import LatexOCR
-
-from sdamgia.exceptions import IncorrectGiaTypeException, ProbBlockIsNoneException
+from sdamgia.exceptions import IncorrectGiaTypeError, ProbBlockIsNoneError
 
 
 class SdamGIA:
     def __init__(self, gia_type: str = "oge"):
         gia_type = gia_type.lower()
         if gia_type not in ["oge", "ege"]:
-            raise IncorrectGiaTypeException(gia_type)
+            raise IncorrectGiaTypeError(gia_type)
 
         self.GIA_TYPE = gia_type
 
@@ -64,23 +62,24 @@ class SdamGIA:
             )  # .replace("\xa0", " "), 'html.parser')
 
         prob_block = soup.find("div", class_="prob_maindiv")
-        # print(probBlock)
+
         if prob_block is None:
-            raise ProbBlockIsNoneException()
-        # print(probBlock)
-        # print(prob_block)
+            raise ProbBlockIsNoneError()
+
         # print(len(prob_block.find_all('div', class_='proby')))
-        # condition_html = str(prob_block.find_all('div', class_="pbody")[0]).replace('/get_file',
-        #                                                                            f'{self._SUBJECT_BASE_URL[subject]}/get_file').replace(
-        #     '−', '-')
-        # solution_html = str(prob_block.find_all('div', class_="pbody")[1]).replace('/get_file',
-        #                                                                           f'{self._SUBJECT_BASE_URL[subject]}/get_file').replace(
-        #     '−', '-')
-        #
-        #
+        # condition_html = (
+        #     str(prob_block.find_all("div", class_="pbody")[0])
+        #     .replace("/get_file", f"{self._SUBJECT_BASE_URL[subject]}/get_file")
+        #     .replace("−", "-")
+        # )
+        # solution_html = (
+        #     str(prob_block.find_all("div", class_="pbody")[1])
+        #     .replace("/get_file", f"{self._SUBJECT_BASE_URL[subject]}/get_file")
+        #     .replace("−", "-")
+        # )
 
         for i in prob_block.find_all("img"):
-            if not "sdamgia.ru" in i["src"]:
+            if "sdamgia.ru" not in i["src"]:
                 i["src"] = self.SUBJECT_BASE_URL[subject] + i["src"]
 
         problem_url = f"{self.SUBJECT_BASE_URL[subject]}/problem?id={problem_id}"
@@ -92,7 +91,8 @@ class SdamGIA:
 
             condition_html = str(condition_element)
 
-            # condition_element = BeautifulSoup(''.join([str(i) for i in condition_element]), 'lxml')
+            # condition_element = BeautifulSoup("".join([str(i) for i in condition_element]),
+            # "lxml")
             condition_image_links = [
                 i.get("src") for i in condition_element.find_all("img", class_="tex")
             ]
@@ -193,8 +193,7 @@ class SdamGIA:
         # string_tex_list = [(images_data[i][0], tex) for i, tex in enumerate(string_tex_list)]
         # print(string_tex_list)
         # tex_dict = {url: tex for url, tex in string_tex_list}
-        tex_dict = {images_data[i][0]: string_tex_list[i] for i in range(len(images_data))}
-        return tex_dict
+        return {images_data[i][0]: string_tex_list[i] for i in range(len(images_data))}
 
     async def scrap_problem_without_text_by_id(
         self, subject: str, problem_id: str, session: aiohttp.ClientSession
@@ -209,10 +208,10 @@ class SdamGIA:
         prob_block = soup.find("div", class_="prob_maindiv")
         # print(probBlock)
         if prob_block is None:
-            raise ProbBlockIsNoneException()
+            raise ProbBlockIsNoneError()
 
         for i in prob_block.find_all("img"):
-            if not "sdamgia.ru" in i["src"]:
+            if "sdamgia.ru" not in i["src"]:
                 i["src"] = urljoin(self.SUBJECT_BASE_URL[subject], i["src"])
 
         problem_url = f"{self.SUBJECT_BASE_URL[subject]}/problem?id={problem_id}"
@@ -224,7 +223,8 @@ class SdamGIA:
 
             condition_html = str(condition_element)
 
-            # condition_element = BeautifulSoup(''.join([str(i) for i in condition_element]), 'lxml')
+            # condition_element = BeautifulSoup(''.join([str(i) for i in condition_element]),
+            # 'lxml')
             condition_image_links = [
                 i.get("src") for i in condition_element.find_all("img", class_="tex")
             ]
@@ -286,7 +286,7 @@ class SdamGIA:
             "gia_type": self.GIA_TYPE,
         }
 
-    async def search(self, subject: str, query: str) -> List[str]:
+    async def search(self, subject: str, query: str) -> list[str]:
         """
         Поиск задач по запросу
 
@@ -328,7 +328,7 @@ class SdamGIA:
 
     async def get_theme_by_id(
         self, subject: str, theme_id: str, session: aiohttp.ClientSession
-    ) -> List[str]:
+    ) -> list[str]:
         params = {"theme": theme_id, "page": 1}
         problem_ids = []
         while True:
@@ -356,39 +356,39 @@ class SdamGIA:
         doujin_page = requests.get(f"{self.SUBJECT_BASE_URL[subject]}/prob_catalog")
         soup = BeautifulSoup(doujin_page.content, "html.parser")
         catalog = []
-        CATALOG = []
+        catalog_result = []
 
         for i in soup.find_all("div", {"class": "cat_category"}):
             try:
                 i["data-id"]
-            except:
+            except IndexError:
                 catalog.append(i)
 
         for topic in catalog[1:]:
-            TOPIC_NAME = topic.find("b", {"class": "cat_name"}).text.split(". ")[1]
-            TOPIC_ID = topic.find("b", {"class": "cat_name"}).text.split(". ")[0]
-            if TOPIC_ID[0] == " ":
-                TOPIC_ID = TOPIC_ID[2:]
-            if TOPIC_ID.find("Задания ") == 0:
-                TOPIC_ID = TOPIC_ID.replace("Задания ", "")
+            topic_name = topic.find("b", {"class": "cat_name"}).text.split(". ")[1]
+            topic_id = topic.find("b", {"class": "cat_name"}).text.split(". ")[0]
+            if topic_id[0] == " ":
+                topic_id = topic_id[2:]
+            if topic_id.find("Задания ") == 0:
+                topic_id = topic_id.replace("Задания ", "")
 
-            CATALOG.append(
-                dict(
-                    topic_id=TOPIC_ID,
-                    topic_name=TOPIC_NAME,
-                    categories=[
-                        dict(
-                            category_id=i["data-id"],
-                            category_name=i.find("a", {"class": "cat_name"}).text,
-                        )
+            catalog_result.append(
+                {
+                    "topic_id": topic_id,
+                    "topic_name": topic_name,
+                    "categories": [
+                        {
+                            "category_id": i["data-id"],
+                            "category_name": i.find("a", {"class": "cat_name"}).text,
+                        }
                         for i in topic.find("div", {"class": "cat_children"}).find_all(
                             "div", {"class": "cat_category"}
                         )
                     ],
-                )
+                }
             )
 
-        return CATALOG
+        return catalog_result
 
     def generate_test(self, subject: str, problems=None) -> str:
         """
@@ -399,8 +399,10 @@ class SdamGIA:
 
         :param problems: Список заданий
         По умолчанию генерируется тест, включающий по одной задаче из каждого задания предмета.
-        Так же можно вручную указать одинаковое количество задач для каждого из заданий: {'full': <кол-во задач>}
-        Указать определенные задания с определенным количеством задач для каждого: {<номер задания>: <кол-во задач>, ... }
+        Так же можно вручную указать одинаковое количество задач для каждогоиз заданий:
+        {'full': <кол-во задач>}
+        Указать определенные задания с определенным количеством задач для каждого:
+        {<номер задания>: <кол-во задач>, ... }
         :type problems: dict
         """
 
@@ -481,19 +483,19 @@ class SdamGIA:
 
         """
 
-        params = dict(
-            id=testid,
-            print="true",
-            pdf=pdf,
-            sol=solution,
-            num=nums,
-            ans=answers,
-            key=key,
-            crit=crit,
-            pre=instruction,
-            dcol=col,
-            tt=tt,
-        )
+        params = {
+            "id": testid,
+            "print": "true",
+            "pdf": pdf,
+            "sol": solution,
+            "num": nums,
+            "ans": answers,
+            "key": key,
+            "crit": crit,
+            "pre": instruction,
+            "dcol": col,
+            "tt": tt,
+        }
 
         return (
             self.SUBJECT_BASE_URL[subject]
@@ -504,15 +506,23 @@ class SdamGIA:
 
 
 def make_pdf_from_html(html: str, output_file_path: str):
-    if ("<html>" or "body") not in html:
+    if "<html>" not in html or "body" not in html:
         html = "<html><body>%s</body></html>" % html
-    ps = subprocess.Popen(["echo", "<html><body>%s</body></html>" % html], stdout=subprocess.PIPE)
-    # subprocess.check_output(["pandoc", '--standalone', "-", "-f", "html", "-o", output_file_path.replace('.pdf', '.tex'), "-t", "latex", "-V", "fontenc=T2A"],
-    #                         stdin=ps.stdout)
-    subprocess.check_output(
-        ["pandoc", "-", "-f", "html", "-o", output_file_path, "-t", "latex", "-V", "fontenc=T2A"],
-        stdin=ps.stdout,
-    )
+    subprocess.Popen(
+        [
+            "/usr/bin/pandoc",
+            "-",
+            "-f",
+            "html",
+            "-o",
+            output_file_path,
+            "-t",
+            "latex",
+            "-V",
+            "fontenc=T2A",
+        ],
+        stdin=subprocess.PIPE,
+    ).communicate(input=f"<html><body>{html}</body></html>".encode())
 
 
 def make_problem_pdf_from_data(data: dict):
@@ -524,9 +534,9 @@ def make_problem_pdf_from_data(data: dict):
 
 def create_pdf_from_problem_data(data: dict):
     tex = (
-        "\documentclass{article}\n"
-        + "\\usepackage[T2A]{fontenc}\n\\usepackage[utf8]{inputenc}\n\\usepackage[russian]{babel}\n"
-        + "\\begin{document}\n"
+        "\\documentclass{article}\n"
+        + "\\usepackage[T2A]{fontenc}\n\\usepackage[utf8]{inputenc}\n\\usepackage[russian]{babel}"
+        + "\n\\begin{document}\n"
         + "\\section{%s}\n\n" % data.get("id")
         + data.get("condition").get("text")
         + "\n\n"
@@ -537,18 +547,13 @@ def create_pdf_from_problem_data(data: dict):
     print(tex)
     temp_file_path = f"{data.get('id')}-{data.get('subject')}.tex"
     pdf_file_path = f"{data.get('id')}-{data.get('subject')}.pdf"
-    with open(temp_file_path, "wt") as f:
+    with open(temp_file_path, "w") as f:
         f.write(tex)
     sleep(10)
     try:
-        subprocess.Popen(["pdflatex", temp_file_path, "-o", pdf_file_path])
+        subprocess.Popen(["/usr/bin/pdflatex", temp_file_path, "-o", pdf_file_path])
     finally:
         os.remove(temp_file_path)
-    # ps = subprocess.Popen(["echo", tex], stdout=subprocess.PIPE)
-    # subprocess.check_output(["pandoc", '--standalone', "-", "-f", "html", "-o", output_file_path.replace('.pdf', '.tex'), "-t", "latex", "-V", "fontenc=T2A"],
-    #                         stdin=ps.stdout)
-    # subprocess.check_output(["pandoc", "-", "-f", "html", "-o", output_file_path, "-t", "latex", "-V", "fontenc=T2A"],
-    #                         stdin=ps.stdout)
 
 
 async def test():
