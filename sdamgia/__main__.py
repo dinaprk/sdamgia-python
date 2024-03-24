@@ -14,41 +14,19 @@ from PIL import Image
 from PIL.Image import Image as ImageType
 
 from sdamgia.exceptions import ProblemBlockNotFoundError
+from sdamgia.types import GitType, Subject
 
 
 class SdamGIA:
-    def __init__(self, gia_type: str = "oge"):
-        gia_type = gia_type.lower()
-        if gia_type not in ["oge", "ege"]:
-            raise ValueError(f'gia_type can be "oge" or "ege", not {gia_type}')
+    BASE_DOMAIN = "sdamgia.ru"
 
-        self.GIA_TYPE = gia_type
-
-        self.BASE_DOMAIN = "sdamgia.ru"
-
-        subjects = [
-            "math",
-            "phys",
-            "inf",
-            "rus",
-            "bio",
-            "en",
-            "chem",
-            "geo",
-            "soc",
-            "de",
-            "rf",
-            "lit",
-            "sp",
-            "hist",
-        ]
-        if gia_type == "ege":
-            subjects.append("mathb")
-        self.SUBJECT_BASE_URL = {
-            subject: f"https://{subject}-{gia_type}.{self.BASE_DOMAIN}" for subject in subjects
-        }
-
+    def __init__(self, gia_type: GitType = GitType.OGE):
+        self.gia_type = gia_type
         self._latex_ocr_model = None
+
+    def base_url(self, subject: Subject, gia_type: GitType | None = None) -> str:
+        gia_type = gia_type or self.gia_type
+        return f"https://{subject.value}-{gia_type.value}.{self.BASE_DOMAIN}"
 
     @staticmethod
     async def get_image_from_url(url: str, session: aiohttp.ClientSession) -> ImageType:
@@ -80,27 +58,25 @@ class SdamGIA:
 
     async def get_problem_by_id(
         self,
-        subject: str,
-        problem_id: str,
+        subject: Subject,
+        problem_id: int,
         session: aiohttp.ClientSession,
         recognize_text: bool = False,
     ) -> dict[str, Any]:
-        async with session.get(
-            f"{self.SUBJECT_BASE_URL[subject]}/problem?id={problem_id}"
-        ) as page_html:
-            soup = BeautifulSoup((await page_html.text()).replace("\xa0", " "), "lxml")
+        problem_url = f"{self.base_url(subject)}/problem?id={problem_id}"
+        async with session.get(problem_url) as problem_response:
+            soup = BeautifulSoup((await problem_response.text()).replace("\xa0", " "), "lxml")
 
-        prob_block = soup.find("div", {"class": "prob_maindiv"})
+        problem_block = soup.find("div", {"class": "prob_maindiv"})
 
-        if prob_block is None:
+        if problem_block is None:
             raise ProblemBlockNotFoundError()
 
-        for i in prob_block.find_all("img"):
-            if self.BASE_DOMAIN not in i["src"]:
-                i["src"] = self.SUBJECT_BASE_URL[subject] + i["src"]
+        for img in problem_block.find_all("img"):
+            if self.BASE_DOMAIN not in img["src"]:
+                img["src"] = urljoin(self.base_url(subject), img["src"])
 
-        problem_url = f"{self.SUBJECT_BASE_URL[subject]}/problem?id={problem_id}"
-        topic_id = " ".join(prob_block.find("span", {"class": "prob_nums"}).text.split()[1:][:-2])
+        topic_id = int(problem_block.find("span", {"class": "prob_nums"}).text.split()[1])
 
         try:
             condition_element = soup.find_all("div", {"class": "pbody"})[0]
@@ -133,9 +109,9 @@ class SdamGIA:
             condition = {"text": "", "html": "", "images": []}
 
         try:
-            solution_element = prob_block.find("div", class_="solution")
+            solution_element = problem_block.find("div", {"class": "solution"})
             if solution_element is None:
-                solution_element = prob_block.find_all("div", class_="pbody")[1]
+                solution_element = problem_block.find_all("div", class_="pbody")[1]
 
             solution_html = str(solution_element)
 
@@ -165,7 +141,7 @@ class SdamGIA:
             solution = {"text": "", "html": "", "images": []}
 
         try:
-            answer = prob_block.find("div", {"class": "answer"}).text.replace("Ответ: ", "")
+            answer = problem_block.find("div", {"class": "answer"}).text.replace("Ответ: ", "")
         except (IndexError, AttributeError):
             answer = ""
 
@@ -174,8 +150,8 @@ class SdamGIA:
 
         problem_analogs = [
             i.get("href").replace("/problem?id=", "")
-            for i in prob_block.find_all("div", class_="minor")[0].find_all("a")
-            if problem_id not in i.get("href")
+            for i in problem_block.find_all("div", class_="minor")[0].find_all("a")
+            if str(problem_id) not in i.get("href")
         ]
         problem_analogs = sorted([int(i) for i in problem_analogs if i.isdigit()])
 
@@ -187,11 +163,11 @@ class SdamGIA:
             "topic_id": topic_id,
             "analogs": problem_analogs,
             "url": problem_url,
-            "subject": subject,
-            "gia_type": self.GIA_TYPE,
+            "subject": subject.value,
+            "gia_type": self.gia_type.value,
         }
 
-    async def search(self, subject: str, query: str) -> list[str]:
+    async def search(self, subject: Subject, query: str) -> list[str]:
         """
         Поиск задач по запросу
 
@@ -203,7 +179,7 @@ class SdamGIA:
         async with aiohttp.ClientSession() as session:
             while True:
                 async with session.get(
-                    urljoin(self.SUBJECT_BASE_URL[subject], "/search"), params=params
+                    urljoin(self.base_url(subject), "/search"), params=params
                 ) as response:
                     soup = BeautifulSoup(await response.text(), "lxml")
                     ids = [
@@ -214,26 +190,26 @@ class SdamGIA:
                     problem_ids.extend(ids)
         return problem_ids
 
-    def get_test_by_id(self, subject: str, test_id: str):
+    def get_test_by_id(self, subject: Subject, test_id: int):
         """
         Получение списка задач, включенных в тест
 
         :param subject: Наименование предмета
         :param test_id: Идентификатор теста
         """
-        doujin_page = requests.get(f"{self.SUBJECT_BASE_URL[subject]}/test?id={test_id}")
+        doujin_page = requests.get(f"{self.base_url(subject)}/test?id={test_id}")
         soup = BeautifulSoup(doujin_page.content, "html.parser")
         return [i.text.split()[-1] for i in soup.find_all("span", {"class": "prob_nums"})]
 
     async def get_theme_by_id(
-        self, subject: str, theme_id: str, session: aiohttp.ClientSession
+        self, subject: Subject, theme_id: int, session: aiohttp.ClientSession
     ) -> list[str | int]:
-        params = {"theme": theme_id, "page": 1}
+        params: dict[str, int] = {"theme": theme_id, "page": 1}
         problem_ids = []
         while True:
             logging.info(f'Getting theme {theme_id}, page={params["page"]}')
             async with session.get(
-                urljoin(self.SUBJECT_BASE_URL[subject], "/test"), params=params
+                urljoin(self.base_url(subject), "/test"), params=params
             ) as response:
                 soup = BeautifulSoup(await response.text(), "html.parser")
                 ids = soup.find_all("span", class_="prob_nums")
@@ -244,14 +220,14 @@ class SdamGIA:
             params["page"] += 1
         return problem_ids
 
-    def get_catalog(self, subject: str) -> list[dict[str, Any]]:
+    def get_catalog(self, subject: Subject) -> list[dict[str, Any]]:
         """
         Получение каталога заданий для определенного предмета
 
         :param subject: Наименование предмета
         """
 
-        doujin_page = requests.get(f"{self.SUBJECT_BASE_URL[subject]}/prob_catalog")
+        doujin_page = requests.get(f"{self.base_url(subject)}/prob_catalog")
         soup = BeautifulSoup(doujin_page.content, "html.parser")
         catalog = []
         catalog_result = []
@@ -288,7 +264,7 @@ class SdamGIA:
 
         return catalog_result
 
-    def generate_test(self, subject: str, problems: dict[str, int] | None = None) -> str:
+    def generate_test(self, subject: Subject, problems: dict[str, int] | None = None) -> str:
         """
         Генерирует тест по заданным параметрам
 
@@ -314,7 +290,7 @@ class SdamGIA:
 
         return (
             requests.get(
-                f"{self.SUBJECT_BASE_URL[subject]}/test?a=generate",
+                f"{self.base_url(subject)}/test?a=generate",
                 params=params,
                 allow_redirects=False,
             )
@@ -325,8 +301,8 @@ class SdamGIA:
 
     def generate_pdf(
         self,
-        subject: str,
-        test_id: str,
+        subject: Subject,
+        test_id: int,
         solution: bool = False,
         nums: bool = False,
         answers: bool = False,
@@ -372,19 +348,18 @@ class SdamGIA:
         }
 
         return (
-            self.SUBJECT_BASE_URL[subject]
+            self.base_url(subject)
             + requests.get(
-                f"{self.SUBJECT_BASE_URL[subject]}/test", params=params, allow_redirects=False
+                f"{self.base_url(subject)}/test", params=params, allow_redirects=False
             ).headers["location"]
         )
 
 
 async def test() -> None:
     async with aiohttp.ClientSession() as session:
-        sdamgia = SdamGIA(gia_type="ege")
-        subject = "math"
-        id = "26596"
-        # data = await sdamgia.get_problem_latex_by_id(subject, id, session)
+        sdamgia = SdamGIA(gia_type=GitType.EGE)
+        subject = Subject.MATH
+        id = 26596
         data = await sdamgia.get_problem_by_id(subject, id, session, recognize_text=False)
         print(json.dumps(data, indent=4, ensure_ascii=False))
 
