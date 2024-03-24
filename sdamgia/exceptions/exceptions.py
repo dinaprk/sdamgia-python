@@ -5,4 +5,4 @@ class IncorrectGiaTypeException(Exception):
 
 class ProbBlockIsNoneException(Exception):
     def __init__(self):
-        print('prob_block is None')
+        print("prob_block is None")
