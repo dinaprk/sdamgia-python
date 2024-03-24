@@ -5,7 +5,7 @@ import logging
 import os
 import subprocess
 import unicodedata
-from time import sleep
+from typing import Any, Literal
 from urllib.parse import urljoin
 
 import aiohttp
@@ -13,7 +13,9 @@ import cairosvg
 import PIL
 import requests
 from bs4 import BeautifulSoup
+from cairosvg import svg2png
 from PIL import Image
+from PIL.Image import Image as ImageType
 
 from pix2tex.cli import LatexOCR
 from sdamgia.exceptions import IncorrectGiaTypeError, ProbBlockIsNoneError
@@ -291,10 +293,7 @@ class SdamGIA:
         Поиск задач по запросу
 
         :param subject: Наименование предмета
-        :type subject: str
-
         :param query: Запрос
-        :type query: str
         """
         problem_ids = []
         params = {"search": query, "page": 1}
@@ -312,15 +311,12 @@ class SdamGIA:
                     problem_ids.extend(ids)
         return problem_ids
 
-    def get_test_by_id(self, subject, test_id):
+    def get_test_by_id(self, subject: str, test_id: str):
         """
         Получение списка задач, включенных в тест
 
         :param subject: Наименование предмета
-        :type subject: str
-
         :param test_id: Идентификатор теста
-        :type test_id: str
         """
         doujin_page = requests.get(f"{self.SUBJECT_BASE_URL[subject]}/test?id={test_id}")
         soup = BeautifulSoup(doujin_page.content, "html.parser")
@@ -328,7 +324,7 @@ class SdamGIA:
 
     async def get_theme_by_id(
         self, subject: str, theme_id: str, session: aiohttp.ClientSession
-    ) -> list[str]:
+    ) -> list[str | int]:
         params = {"theme": theme_id, "page": 1}
         problem_ids = []
         while True:
@@ -345,12 +341,11 @@ class SdamGIA:
             params["page"] += 1
         return problem_ids
 
-    def get_catalog(self, subject):
+    def get_catalog(self, subject: str) -> list[dict[str, Any]]:
         """
         Получение каталога заданий для определенного предмета
 
         :param subject: Наименование предмета
-        :type subject: str
         """
 
         doujin_page = requests.get(f"{self.SUBJECT_BASE_URL[subject]}/prob_catalog")
@@ -390,12 +385,11 @@ class SdamGIA:
 
         return catalog_result
 
-    def generate_test(self, subject: str, problems=None) -> str:
+    def generate_test(self, subject: str, problems: dict[str, int] | None = None) -> str:
         """
         Генерирует тест по заданным параметрам
 
         :param subject: Наименование предмета
-        :type subject: str
 
         :param problems: Список заданий
         По умолчанию генерируется тест, включающий по одной задаче из каждого задания предмета.
@@ -403,7 +397,6 @@ class SdamGIA:
         {'full': <кол-во задач>}
         Указать определенные задания с определенным количеством задач для каждого:
         {<номер задания>: <кол-во задач>, ... }
-        :type problems: dict
         """
 
         if problems is None:
@@ -430,61 +423,39 @@ class SdamGIA:
     def generate_pdf(
         self,
         subject: str,
-        testid: str,
-        solution="",
-        nums="",
-        answers="",
-        key="",
-        crit="",
-        instruction="",
-        col="",
-        tt="",
-        pdf=True,
-    ):
+        test_id: str,
+        solution: bool = False,
+        nums: bool = False,
+        answers: bool = False,
+        key: bool = False,
+        crit: bool = False,
+        instruction: bool = False,
+        col: str = "",
+        tt: str = "",
+        pdf: Literal["h", "z", "m"] = "z",
+    ) -> str:
         """
         Генерирует pdf версию теста
 
         :param subject: Наименование предмета
-        :type subject: str
-
-        :param testid: Идентифигатор теста
-        :type testid: str
-
+        :param test_id: Идентифигатор теста
         :param solution: Пояснение
-        :type solution: bool
-
         :param nums: № заданий
-        :type nums: bool
-
         :param answers: Ответы
-        :type answers: bool
-
         :param key: Ключ
-        :type key: bool
-
         :param crit: Критерии
-        :type crit: bool
-
         :param instruction: Инструкция
-        :type instruction: bool
-
         :param col: Нижний колонтитул
-        :type col: str
-
         :param tt: Заголовок
-        :type tt: str
-
         :param pdf: Версия генерируемого pdf документа
         По умолчанию генерируется стандартная вертикальная версия
         h - версия с большими полями
         z - версия с крупным шрифтом
         m - горизонтальная версия
-        :type pdf: str
-
         """
 
         params = {
-            "id": testid,
+            "id": test_id,
             "print": "true",
             "pdf": pdf,
             "sol": solution,
