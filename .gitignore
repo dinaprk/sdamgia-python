@@ -1,12 +1,33 @@
+# Project
+.idea/
+.vscode/
+.venv/
+.tests/
+.env
 venv/
-*.html
+
+# Cache
+__pycache__/
+*.py[cod]
+.cache/
+.ruff_cache/
+.mypy_cache/
+.pytest_cache/
+.coverage/
+
+# Build
+env/
+build/
+_build/
+dist/
+site/
+*.egg-info/
+*.egg
+
+# Usage results
+images/
 *.db
+*.html
 *.svg
 *.png
 *.json
-cookies_and_headers.py
-bloat_from_experiments/
-images/
-.idea
-__pycache__
-scrapper/images_tests.py
