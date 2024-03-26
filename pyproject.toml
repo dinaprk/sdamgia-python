@@ -30,7 +30,6 @@ select = [
     "DTZ", # flake8-datetimez
 ]
 ignore = [
-    "S113", # request-without-timeout
     "S603", # subprocess-without-shell-equals-true
 ]
 
