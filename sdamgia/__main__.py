@@ -50,6 +50,10 @@ class SdamGIA:
             logging.debug(f"Sent GET request: {response.url}")
             return await response.text()
 
+    @staticmethod
+    def _soup(html: str) -> BeautifulSoup:
+        return BeautifulSoup(markup=html, features="lxml")
+
     def base_url(self, subject: Subject | None = None, gia_type: GitType | None = None) -> str:
         gia_type = gia_type or self.gia_type
         subject = subject or self.subject
@@ -77,7 +81,7 @@ class SdamGIA:
         ]
         images_data: tuple[ImageType] = await asyncio.gather(*condition_image_tasks)
         string_tex_list = tuple(map(self.image_to_tex, images_data))
-        return {image_links[i]: string_tex_list[i] for i in range(len(images_data))}
+        return dict(zip(images_data, string_tex_list))
 
     async def get_problem_by_id(
         self,
@@ -86,32 +90,30 @@ class SdamGIA:
         recognize_text: bool = False,
     ) -> dict[str, Any]:
         problem_url = f"{self.base_url(subject)}/problem?id={problem_id}"
-        problem_html = await self._get(problem_url)
-        soup = BeautifulSoup(problem_html.replace("\xa0", " "), "lxml")
+        soup = self._soup(await self._get(problem_url))
 
-        problem_block = soup.find("div", {"class": "prob_maindiv"})
-
-        if problem_block is None:
+        if (problem_block := soup.find("div", class_="prob_maindiv")) is None:
             raise ProblemBlockNotFoundError()
 
         for img in problem_block.find_all("img"):
             if self.BASE_DOMAIN not in img["src"]:
                 img["src"] = urljoin(self.base_url(subject), img["src"])
 
-        topic_id = int(problem_block.find("span", {"class": "prob_nums"}).text.split()[1])
+        try:
+            topic_id = int(problem_block.find("span", class_="prob_nums").text.split()[1])
+        except (IndexError, AttributeError, ValueError):
+            topic_id = -1
 
         try:
-            condition_element = soup.find_all("div", {"class": "pbody"})[0]
-
-            condition_html = str(condition_element)
+            condition_element = soup.find("div", class_="pbody")
 
             condition_image_links = [
-                i.get("src") for i in condition_element.find_all("img", class_="tex")
+                img.get("src") for img in condition_element.find_all("img", class_="tex")
             ]
 
             if recognize_text:
+                # replace images with recognized tex source code
                 condition_tex_dict = await self.get_latex_from_url_list(condition_image_links)
-
                 for img_tag in condition_element.find_all("img", class_="tex"):
                     img_tag.replace_with(condition_tex_dict.get(img_tag.get("src")))
 
@@ -119,21 +121,21 @@ class SdamGIA:
             else:
                 text = ""
 
+            images = condition_image_links + [
+                i.get("src") for i in condition_element.find_all("img")
+            ]
+
             condition = {
                 "text": text,
-                "html": condition_html,
-                "images": condition_image_links
-                + [i.get("src") for i in condition_element.find_all("img")],
+                "html": str(condition_element),
+                "images": images,
             }
         except (IndexError, AttributeError):
             condition = {"text": "", "html": "", "images": []}
 
         try:
-            solution_element = problem_block.find("div", {"class": "solution"})
-            if solution_element is None:
+            if (solution_element := problem_block.find("div", class_="solution")) is None:
                 solution_element = problem_block.find_all("div", class_="pbody")[1]
-
-            solution_html = str(solution_element)
 
             solution_image_links = [
                 i.get("src") for i in solution_element.find_all("img", class_="tex")
@@ -149,17 +151,20 @@ class SdamGIA:
             else:
                 text = ""
 
+            images = solution_image_links + [
+                i.get("src") for i in solution_element.find_all("img")
+            ]
+
             solution = {
                 "text": text,
-                "html": solution_html,
-                "images": solution_image_links
-                + [i.get("src") for i in solution_element.find_all("img")],
+                "html": str(solution_element),
+                "images": images,
             }
         except (IndexError, AttributeError):
             solution = {"text": "", "html": "", "images": []}
 
         try:
-            answer = problem_block.find("div", {"class": "answer"}).text.replace("Ответ: ", "")
+            answer = problem_block.find("div", class_="answer").text.replace("Ответ: ", "")
         except (IndexError, AttributeError):
             answer = ""
 
@@ -167,9 +172,9 @@ class SdamGIA:
         solution["text"] = unicodedata.normalize("NFKC", solution["text"])
 
         problem_analogs = [
-            i.get("href").replace("/problem?id=", "")
-            for i in problem_block.find_all("div", class_="minor")[0].find_all("a")
-            if str(problem_id) not in i.get("href")
+            link["href"].replace("/problem?id=", "")
+            for link in problem_block.find("div", class_="minor").find_all("a")
+            if str(problem_id) not in link["href"]
         ]
         problem_analogs = sorted([int(i) for i in problem_analogs if i.isdigit()])
 
@@ -193,20 +198,19 @@ class SdamGIA:
         :param query: Запрос
         """
         problem_ids = []
-        params = {"search": query, "page": 1}
         page = 1
         while True:
-            text = await self._get(f"{self.base_url(subject)}/search", params=params)
-            soup = BeautifulSoup(text, "lxml")
-            ids = [i.text.split()[-1] for i in soup.find_all("span", {"class": "prob_nums"})]
-            if len(ids) == 0:
+            params = {"search": query, "page": page}
+            html = await self._get(f"{self.base_url(subject)}/search", params=params)
+            soup = self._soup(html)
+            ids = [int(i.text.split()[-1]) for i in soup.find_all("span", class_="prob_nums")]
+            if not ids:
                 break
             problem_ids.extend(ids)
-            params["page"] += 1
             logging.debug(f"{page=}")
             page += 1
         logging.debug(f"total: {len(problem_ids)}")
-        return list(map(int, problem_ids))
+        return problem_ids
 
     async def get_test_by_id(self, subject: Subject, test_id: int) -> list[int]:
         """
@@ -215,23 +219,24 @@ class SdamGIA:
         :param subject: Наименование предмета
         :param test_id: Идентификатор теста
         """
-        text = await self._get(f"{self.base_url(subject)}/test?id={test_id}")
-        soup = BeautifulSoup(text, "html.parser")
-        return [int(i.text.split()[-1]) for i in soup.find_all("span", {"class": "prob_nums"})]
+        html = await self._get(f"{self.base_url(subject)}/test?id={test_id}")
+        soup = self._soup(html)
+        return [int(i.text.split()[-1]) for i in soup.find_all("span", class_="prob_nums")]
 
     async def get_theme_by_id(self, subject: Subject, theme_id: int) -> list[str | int]:
-        params: dict[str, int] = {"theme": theme_id, "page": 1}
         problem_ids = []
+        page = 1
         while True:
-            logging.info(f'Getting theme {theme_id}, page={params["page"]}')
-            response_text = await self._get(f"{self.base_url(subject)}/test", params=params)
-            soup = BeautifulSoup(response_text, "html.parser")
+            params = {"theme": theme_id, "page": page}
+            logging.info(f"Getting theme {theme_id}, page={page}")
+            html = await self._get(f"{self.base_url(subject)}/test", params=params)
+            soup = self._soup(html)
             ids = soup.find_all("span", class_="prob_nums")
             if not ids:
                 break
             ids = [i.find("a").text for i in ids]
             problem_ids.extend(ids)
-            params["page"] += 1
+            page += 1
         return problem_ids
 
     async def get_catalog(self, subject: Subject) -> list[dict[str, Any]]:
@@ -241,20 +246,21 @@ class SdamGIA:
         :param subject: Наименование предмета
         """
 
-        text = await self._get(f"{self.base_url(subject)}/prob_catalog")
-        soup = BeautifulSoup(text, "html.parser")
+        html = await self._get(f"{self.base_url(subject)}/prob_catalog")
+        soup = self._soup(html)
         catalog = []
         catalog_result = []
 
-        for i in soup.find_all("div", {"class": "cat_category"}):
+        for i in soup.find_all("div", class_="cat_category"):
             try:
                 i["data-id"]
             except IndexError:
                 catalog.append(i)
 
         for topic in catalog[1:]:
-            topic_name = topic.find("b", {"class": "cat_name"}).text.split(". ")[1]
-            topic_id = topic.find("b", {"class": "cat_name"}).text.split(". ")[0]
+            topic_text = topic.find("b", class_="cat_name").text
+            topic_name = topic_text.split(". ")[1]
+            topic_id = topic_text.split(". ")[0]
             if topic_id[0] == " ":
                 topic_id = topic_id[2:]
             if topic_id.find("Задания ") == 0:
@@ -267,10 +273,10 @@ class SdamGIA:
                     "categories": [
                         {
                             "category_id": i["data-id"],
-                            "category_name": i.find("a", {"class": "cat_name"}).text,
+                            "category_name": i.find("a", class_="cat_name").text,
                         }
-                        for i in topic.find("div", {"class": "cat_children"}).find_all(
-                            "div", {"class": "cat_category"}
+                        for i in topic.find("div", class_="cat_children").find_all(
+                            "div", class_="cat_category"
                         )
                     ],
                 }

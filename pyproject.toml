@@ -47,6 +47,5 @@ exclude = [
 ]
 
 [[tool.mypy.overrides]]
-module = "pix2tex.*,cairosvg.*"
+module = "pix2tex.*,cairosvg.*,bs4.*"
 ignore_missing_imports = true
-
