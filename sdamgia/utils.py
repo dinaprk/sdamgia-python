@@ -1,11 +1,10 @@
 import os
 import subprocess
-from time import sleep
+
+from .types import Problem
 
 
-def make_pdf_from_html(html: str, output_file_path: str) -> None:
-    if "<html>" not in html or "body" not in html:
-        html = "<html><body>%s</body></html>" % html
+def create_pdf_from_html(html: str, output_file_path: str) -> None:
     subprocess.Popen(
         [
             "/usr/bin/pandoc",
@@ -23,31 +22,29 @@ def make_pdf_from_html(html: str, output_file_path: str) -> None:
     ).communicate(input=f"<html><body>{html}</body></html>".encode())
 
 
-def make_problem_pdf_from_data(data: dict) -> None:
-    make_pdf_from_html(
-        "<b>Условие:</b>" + data["condition_html"] + data["solution_html"],
-        output_file_path=f'{data["subject"]}-{data["problem_id"]}.pdf',
+def create_problem_pdf_html(problem: Problem) -> None:
+    create_pdf_from_html(
+        html=f"<b>Условие:</b>{problem.condition.html}{problem.solution.html}",
+        output_file_path=f"{problem.subject}-{problem.gia_type}-{problem.problem_id}.pdf",
     )
 
 
-def create_pdf_from_problem_data(data: dict) -> None:
+def create_problem_pdf_tex(problem: Problem) -> None:
     tex = (
         "\\documentclass{article}\n"
-        + "\\usepackage[T2A]{fontenc}\n\\usepackage[utf8]{inputenc}\n\\usepackage[russian]{babel}"
-        + "\n\\begin{document}\n"
-        + "\\section{%s}\n\n" % data.get("id")
-        + data.get("condition").get("text")
-        + "\n\n"
-        + "\\subsection{Решение:}\n\n"
-        + data.get("solution").get("text")
-        + "\n\n\\end{document}"
+        "\\usepackage[T2A]{fontenc}\n\\usepackage[utf8]{inputenc}\n\\usepackage[russian]{babel}"
+        "\n\\begin{document}\n"
+        f"\\section{{{problem.problem_id}}}\n\n"
+        f"{problem.condition.text}\n\n"
+        "\\subsection{Решение:}\n\n"
+        f"{problem.solution.text}\n\n"
+        "\\end{document}"
     )
-    print(tex)
-    temp_file_path = f"{data.get('id')}-{data.get('subject')}.tex"
-    pdf_file_path = f"{data.get('id')}-{data.get('subject')}.pdf"
+
+    temp_file_path = f"{problem.problem_id}-{problem.subject}.tex"
+    pdf_file_path = temp_file_path.replace(".tex", ".pdf")
     with open(temp_file_path, "w") as f:
         f.write(tex)
-    sleep(10)
     try:
         subprocess.Popen(["/usr/bin/pdflatex", temp_file_path, "-o", pdf_file_path])
     finally:

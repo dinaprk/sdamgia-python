@@ -1,2 +1,0 @@
-class ProblemBlockNotFoundError(Exception):
-    pass

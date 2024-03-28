@@ -1,6 +1,5 @@
 import asyncio
 import io
-import json
 import logging
 import unicodedata
 from types import TracebackType
@@ -8,13 +7,12 @@ from typing import Any, Literal, Self
 from urllib.parse import urljoin
 
 import aiohttp
-from bs4 import BeautifulSoup
+import bs4
 from cairosvg import svg2png
 from PIL import Image
 from PIL.Image import Image as ImageType
 
-from sdamgia.exceptions import ProblemBlockNotFoundError
-from sdamgia.types import GitType, Subject
+from .types import GitType, Problem, ProblemPart, Subject
 
 
 class SdamGIA:
@@ -46,13 +44,13 @@ class SdamGIA:
     async def _get(self, url: str = "", path: str = "", **kwargs: Any) -> str:
         """Get html from ``url`` or ``path`` endpoint"""
         url = url or urljoin(self.base_url(), path)
-        async with self._session.get(url=url, **kwargs) as response:
+        async with self._session.request(method="GET", url=url, **kwargs) as response:
             logging.debug(f"Sent GET request: {response.url}")
             return await response.text()
 
     @staticmethod
-    def _soup(html: str) -> BeautifulSoup:
-        return BeautifulSoup(markup=html, features="lxml")
+    def _soup(html: str) -> bs4.BeautifulSoup:
+        return bs4.BeautifulSoup(markup=html, features="lxml")
 
     def base_url(self, subject: Subject | None = None, gia_type: GitType | None = None) -> str:
         gia_type = gia_type or self.gia_type
@@ -81,19 +79,38 @@ class SdamGIA:
         ]
         images_data: tuple[ImageType] = await asyncio.gather(*condition_image_tasks)
         string_tex_list = tuple(map(self.image_to_tex, images_data))
-        return dict(zip(images_data, string_tex_list))
+        return dict(zip(image_links, string_tex_list))
+
+    async def _get_problem_part(self, tag: bs4.Tag, recognize_text: bool = False) -> ProblemPart:
+        image_links = [img.get("src") for img in tag.find_all("img", class_="tex")]
+
+        if recognize_text:
+            # replace images with recognized tex source code
+            recognized_texts = await self.get_latex_from_url_list(image_links)
+            for img_tag in tag.find_all("img", class_="tex"):
+                img_tag.replace_with(recognized_texts.get(img_tag.get("src")))
+
+            text = tag.get_text(strip=True).replace("−", "-").replace("\xad", "")
+            text = unicodedata.normalize("NFKC", text)
+        else:
+            text = ""
+
+        for img in tag.find_all("img"):
+            if (link := img.get("src")) is not None and link not in image_links:
+                image_links.append(link)
+
+        return ProblemPart(text=text, html=str(tag), image_links=image_links)
 
     async def get_problem_by_id(
         self,
         subject: Subject,
         problem_id: int,
         recognize_text: bool = False,
-    ) -> dict[str, Any]:
-        problem_url = f"{self.base_url(subject)}/problem?id={problem_id}"
-        soup = self._soup(await self._get(problem_url))
+    ) -> Problem:
+        soup = self._soup(await self._get(f"{self.base_url(subject)}/problem?id={problem_id}"))
 
         if (problem_block := soup.find("div", class_="prob_maindiv")) is None:
-            raise ProblemBlockNotFoundError()
+            raise RuntimeError("Problem block not found")
 
         for img in problem_block.find_all("img"):
             if self.BASE_DOMAIN not in img["src"]:
@@ -102,93 +119,43 @@ class SdamGIA:
         try:
             topic_id = int(problem_block.find("span", class_="prob_nums").text.split()[1])
         except (IndexError, AttributeError, ValueError):
-            topic_id = -1
+            topic_id = None
 
         try:
-            condition_element = soup.find("div", class_="pbody")
-
-            condition_image_links = [
-                img.get("src") for img in condition_element.find_all("img", class_="tex")
-            ]
-
-            if recognize_text:
-                # replace images with recognized tex source code
-                condition_tex_dict = await self.get_latex_from_url_list(condition_image_links)
-                for img_tag in condition_element.find_all("img", class_="tex"):
-                    img_tag.replace_with(condition_tex_dict.get(img_tag.get("src")))
-
-                text = condition_element.text.replace("−", "-")
-            else:
-                text = ""
-
-            images = condition_image_links + [
-                i.get("src") for i in condition_element.find_all("img")
-            ]
-
-            condition = {
-                "text": text,
-                "html": str(condition_element),
-                "images": images,
-            }
+            condition_tag = soup.find("div", class_="pbody")
+            condition = await self._get_problem_part(condition_tag, recognize_text=recognize_text)
         except (IndexError, AttributeError):
-            condition = {"text": "", "html": "", "images": []}
+            condition = None
 
         try:
-            if (solution_element := problem_block.find("div", class_="solution")) is None:
-                solution_element = problem_block.find_all("div", class_="pbody")[1]
-
-            solution_image_links = [
-                i.get("src") for i in solution_element.find_all("img", class_="tex")
-            ]
-
-            if recognize_text:
-                solution_tex_dict = await self.get_latex_from_url_list(solution_image_links)
-
-                for img_tag in solution_element.find_all("img", class_="tex"):
-                    img_tag.replace_with(solution_tex_dict.get(img_tag.get("src")))
-
-                text = solution_element.text.replace("−", "-")
-            else:
-                text = ""
-
-            images = solution_image_links + [
-                i.get("src") for i in solution_element.find_all("img")
-            ]
-
-            solution = {
-                "text": text,
-                "html": str(solution_element),
-                "images": images,
-            }
+            if (solution_tag := problem_block.find("div", class_="solution")) is None:
+                solution_tag = problem_block.find_all("div", class_="pbody")[1]
+            solution = await self._get_problem_part(solution_tag, recognize_text=recognize_text)
         except (IndexError, AttributeError):
-            solution = {"text": "", "html": "", "images": []}
+            solution = None
 
         try:
-            answer = problem_block.find("div", class_="answer").text.replace("Ответ: ", "")
+            answer = problem_block.find("div", class_="answer").text.lstrip("Ответ:").strip()
         except (IndexError, AttributeError):
             answer = ""
 
-        condition["text"] = unicodedata.normalize("NFKC", condition["text"])
-        solution["text"] = unicodedata.normalize("NFKC", solution["text"])
-
-        problem_analogs = [
+        analogs = [
             link["href"].replace("/problem?id=", "")
             for link in problem_block.find("div", class_="minor").find_all("a")
             if str(problem_id) not in link["href"]
         ]
-        problem_analogs = sorted([int(i) for i in problem_analogs if i.isdigit()])
+        analogs = sorted([int(i) for i in analogs if i.isdigit()])
 
-        return {
-            "condition": condition,
-            "solution": solution,
-            "answer": answer,
-            "problem_id": problem_id,
-            "topic_id": topic_id,
-            "analogs": problem_analogs,
-            "url": problem_url,
-            "subject": subject.value,
-            "gia_type": self.gia_type.value,
-        }
+        return Problem(
+            gia_type=self.gia_type,
+            subject=subject,
+            problem_id=problem_id,
+            condition=condition,
+            solution=solution,
+            answer=answer,
+            topic_id=topic_id,
+            analogs=analogs,
+        )
 
     async def search(self, subject: Subject, query: str) -> list[int]:
         """
@@ -378,20 +345,3 @@ class SdamGIA:
                 )
             ).headers["location"],
         )
-
-
-async def test() -> None:
-    async with SdamGIA(gia_type=GitType.EGE, subject=Subject.MATH) as sdamgia:
-        subject = Subject.MATH
-        # test_id = 435345
-        # print(await sdamgia.generate_pdf(subject, test_id, pdf="m", answers=True))
-        # print(await sdamgia.get_test_by_id(subject, test_id))
-
-        problem_id = 26596
-        data = await sdamgia.get_problem_by_id(subject, problem_id, recognize_text=False)
-        # data = await sdamgia.search(Subject.INFORMATICS, query="исполнитель робот")
-        print(json.dumps(data, indent=4, ensure_ascii=False))
-
-
-if __name__ == "__main__":
-    asyncio.run(test())

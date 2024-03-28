@@ -1,12 +1,13 @@
-from enum import Enum
+from dataclasses import dataclass
+from enum import StrEnum
 
 
-class GitType(Enum):
+class GitType(StrEnum):
     OGE = "oge"
     EGE = "ege"
 
 
-class Subject(Enum):
+class Subject(StrEnum):
     MATH = "math"
     MATH_BASE = "mathb"
     PHYSICS = "phys"
@@ -22,3 +23,29 @@ class Subject(Enum):
     GERMAN_LANGUAGE = "de"
     FRANCH_LANGUAGE = "fr"
     SPANISH_LANGUAGE = "sp"
+
+
+@dataclass
+class ProblemPart:
+    text: str
+    html: str
+    image_links: list[str]
+
+
+@dataclass
+class Problem:
+    gia_type: GitType
+    subject: Subject
+    problem_id: int
+    condition: ProblemPart | None
+    solution: ProblemPart | None
+    answer: str
+    topic_id: int | None
+    analogs: list[int]
+
+    @property
+    def url(self) -> str:
+        return (
+            f"https://{self.subject.value}-{self.gia_type.value}.sdamgia.ru"
+            f"/problem?id={self.problem_id}"
+        )
