@@ -32,9 +32,13 @@ def create_problem_pdf_html(problem: Problem) -> None:
 def create_problem_pdf_tex(problem: Problem) -> None:
     tex = (
         "\\documentclass{article}\n"
-        "\\usepackage[T2A]{fontenc}\n\\usepackage[utf8]{inputenc}\n\\usepackage[russian]{babel}"
-        "\n\\begin{document}\n"
-        f"\\section{{{problem.problem_id}}}\n\n"
+        "\\usepackage[T2A]{fontenc}\n\\usepackage[utf8]{inputenc}\n"
+        "\\usepackage[russian,english]{babel}\n"
+        "\\usepackage{amsmath}\n\\usepackage{amssymb}\n"
+        "\\usepackage{hyperref}\n\\hypersetup{colorlinks=true,urlcolor=blue}\n\n"
+        "\\begin{document}\n"
+        f"\\section{{\\href{{{problem.problem_id}}}{{{problem.url}}}\n\n"
+        "\\subsection{Условие:}\n\n"
         f"{problem.condition.text}\n\n"
         "\\subsection{Решение:}\n\n"
         f"{problem.solution.text}\n\n"
