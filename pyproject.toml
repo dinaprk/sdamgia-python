@@ -1,3 +1,35 @@
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.poetry]
+name = "sdamgia"
+version = "0.1.0"
+description = "Unofficial API for SdamGIA educational portal for exam preparation."
+authors = ["Динаzavr <dinaprk@cumallover.me>", "loneinheart <loneinheart@tfwno.gf>"]
+license = "LGPLv3+"
+
+[tool.poetry.dependencies]
+python = "^3.10"
+aiohttp = "^3.8.4"
+beautifulsoup4 = "^4.12.2"
+lxml = "^5.1.1"
+pillow = "^10.2.0"
+cairosvg = "^2.7.0"
+
+[tool.poetry.extras]
+pix2tex = ["pix2tex"]
+
+[tool.poetry.dependencies.pix2tex]
+optional = true
+version = "^0.1.2"
+extras = ["cli"]
+
+[tool.poetry.group.dev.dependencies]
+ruff = "^0.3.3"
+mypy = "^1.8.0"
+types-pillow = "^10.2.0"
+
 [tool.ruff]
 target-version = "py310"
 line-length = 99

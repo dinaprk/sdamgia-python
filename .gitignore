@@ -5,6 +5,7 @@
 .tests/
 .env
 venv/
+poetry.lock
 
 # Cache
 __pycache__/
