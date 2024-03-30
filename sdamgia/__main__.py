@@ -64,24 +64,24 @@ class SdamGIA:
         if not self._session.closed:
             await self._session.close()
 
-    async def _get(self, url: str = "", path: str = "", **kwargs: Any) -> str:
-        """Get html from ``url`` or ``path`` endpoint"""
-        url = url or urljoin(self.base_url(), path)
+    async def _get(self, path: str = "", url: str = "", **kwargs: Any) -> str:
+        """Get html from full :var:`url` or :var:`path` relative to base url"""
+        url = url or urljoin(self.base_url, path)
         async with self._session.request(method="GET", url=url, **kwargs) as response:
-            logging.debug(f"Sent GET request: {response.url}")
+            logging.debug(f"Sent GET request: {response.status}: {response.url}")
+            response.raise_for_status()
             return await response.text()
 
     @staticmethod
     def _soup(html: str) -> bs4.BeautifulSoup:
         return bs4.BeautifulSoup(markup=html, features="lxml")
 
-    def base_url(self, subject: Subject | None = None, gia_type: GitType | None = None) -> str:
-        gia_type = gia_type or self.gia_type
-        subject = subject or self.subject
-        return f"https://{subject.value}-{gia_type.value}.{self.BASE_DOMAIN}"
+    @property
+    def base_url(self) -> str:
+        return f"https://{self.subject}-{self.gia_type}.{self.BASE_DOMAIN}"
 
     async def get_image_from_url(self, url: str) -> ImageType:
-        byte_string = await self._get(url)
+        byte_string = await self._get(url=url)
         png_bytes = svg2png(bytestring=byte_string)
         buffer = io.BytesIO(png_bytes)
         return Image.open(buffer)
@@ -130,14 +130,14 @@ class SdamGIA:
         problem_id: int,
         recognize_text: bool = False,
     ) -> Problem:
-        soup = self._soup(await self._get(f"{self.base_url()}/problem?id={problem_id}"))
+        soup = self._soup(await self._get(f"/problem?id={problem_id}"))
 
         if (problem_block := soup.find("div", class_="prob_maindiv")) is None:
             raise RuntimeError("Problem block not found")
 
         for img in problem_block.find_all("img"):
             if self.BASE_DOMAIN not in img["src"]:
-                img["src"] = urljoin(self.base_url(), img["src"])
+                img["src"] = urljoin(self.base_url, img["src"])
 
         try:
             topic_id = int(problem_block.find("span", class_="prob_nums").text.split()[1])
@@ -191,8 +191,7 @@ class SdamGIA:
         page = 1
         while True:
             params = {"search": query, "page": page}
-            html = await self._get(f"{self.base_url()}/search", params=params)
-            soup = self._soup(html)
+            soup = self._soup(await self._get("/search", params=params))
             ids = [int(i.text.split()[-1]) for i in soup.find_all("span", class_="prob_nums")]
             if not ids:
                 break
@@ -209,8 +208,7 @@ class SdamGIA:
 
         :param test_id: Идентификатор теста
         """
-        html = await self._get(f"{self.base_url()}/test?id={test_id}")
-        soup = self._soup(html)
+        soup = self._soup(await self._get(f"/test?id={test_id}"))
         return [int(i.text.split()[-1]) for i in soup.find_all("span", class_="prob_nums")]
 
     @handle_params
@@ -220,8 +218,7 @@ class SdamGIA:
         while True:
             params = {"theme": theme_id, "page": page}
             logging.info(f"Getting theme {theme_id}, page={page}")
-            html = await self._get(f"{self.base_url()}/test", params=params)
-            soup = self._soup(html)
+            soup = self._soup(await self._get("/test", params=params))
             ids = soup.find_all("span", class_="prob_nums")
             if not ids:
                 break
@@ -236,8 +233,7 @@ class SdamGIA:
         Получение каталога заданий для определенного предмета
         """
 
-        html = await self._get(f"{self.base_url()}/prob_catalog")
-        soup = self._soup(html)
+        soup = self._soup(await self._get("/prob_catalog"))
         catalog = []
         catalog_result = []
 
@@ -300,7 +296,7 @@ class SdamGIA:
         return (
             (
                 await self._session.get(
-                    f"{self.base_url()}/test?a=generate",
+                    f"{self.base_url}/test?a=generate",
                     params=params,
                     allow_redirects=False,
                 )
@@ -358,10 +354,10 @@ class SdamGIA:
         }
 
         return urljoin(
-            self.base_url(),
+            self.base_url,
             (
                 await self._session.get(
-                    f"{self.base_url()}/test", params=params, allow_redirects=False
+                    f"{self.base_url}/test", params=params, allow_redirects=False
                 )
             ).headers["location"],
         )
