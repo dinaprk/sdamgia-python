@@ -2,6 +2,7 @@ import asyncio
 import io
 import logging
 import unicodedata
+from collections.abc import Callable
 from types import TracebackType
 from typing import Any, Literal, Self
 from urllib.parse import urljoin
@@ -13,6 +14,28 @@ from PIL import Image
 from PIL.Image import Image as ImageType
 
 from .types import GitType, Problem, ProblemPart, Subject
+
+
+def handle_params(method: Callable[..., Any]) -> Callable[..., Any]:
+    """Handle :var:`gia_type` and :var:`subject` params"""
+
+    async def wrapper(self: Any, *args: Any, **kwargs: Any) -> Any:
+        save_gia_type = self.gia_type
+        save_subject = self.subject
+
+        if (gia_type := kwargs.pop("gia_type", None)) is not None:
+            self.gia_type = gia_type
+        if (subject := kwargs.pop("subject", None)) is not None:
+            self.subject = subject
+
+        result = await method(self, *args, **kwargs)
+
+        self.gia_type = save_gia_type
+        self.subject = save_subject
+
+        return result
+
+    return wrapper
 
 
 class SdamGIA:
@@ -101,20 +124,20 @@ class SdamGIA:
 
         return ProblemPart(text=text, html=str(tag), image_links=image_links)
 
+    @handle_params
     async def get_problem_by_id(
         self,
-        subject: Subject,
         problem_id: int,
         recognize_text: bool = False,
     ) -> Problem:
-        soup = self._soup(await self._get(f"{self.base_url(subject)}/problem?id={problem_id}"))
+        soup = self._soup(await self._get(f"{self.base_url()}/problem?id={problem_id}"))
 
         if (problem_block := soup.find("div", class_="prob_maindiv")) is None:
             raise RuntimeError("Problem block not found")
 
         for img in problem_block.find_all("img"):
             if self.BASE_DOMAIN not in img["src"]:
-                img["src"] = urljoin(self.base_url(subject), img["src"])
+                img["src"] = urljoin(self.base_url(), img["src"])
 
         try:
             topic_id = int(problem_block.find("span", class_="prob_nums").text.split()[1])
@@ -148,7 +171,7 @@ class SdamGIA:
 
         return Problem(
             gia_type=self.gia_type,
-            subject=subject,
+            subject=self.subject,
             problem_id=problem_id,
             condition=condition,
             solution=solution,
@@ -157,18 +180,18 @@ class SdamGIA:
             analogs=analogs,
         )
 
-    async def search(self, subject: Subject, query: str) -> list[int]:
+    @handle_params
+    async def search(self, query: str) -> list[int]:
         """
         Поиск задач по запросу
 
-        :param subject: Наименование предмета
         :param query: Запрос
         """
         problem_ids = []
         page = 1
         while True:
             params = {"search": query, "page": page}
-            html = await self._get(f"{self.base_url(subject)}/search", params=params)
+            html = await self._get(f"{self.base_url()}/search", params=params)
             soup = self._soup(html)
             ids = [int(i.text.split()[-1]) for i in soup.find_all("span", class_="prob_nums")]
             if not ids:
@@ -179,24 +202,25 @@ class SdamGIA:
         logging.debug(f"total: {len(problem_ids)}")
         return problem_ids
 
-    async def get_test_by_id(self, subject: Subject, test_id: int) -> list[int]:
+    @handle_params
+    async def get_test_by_id(self, test_id: int) -> list[int]:
         """
         Получение списка задач, включенных в тест
 
-        :param subject: Наименование предмета
         :param test_id: Идентификатор теста
         """
-        html = await self._get(f"{self.base_url(subject)}/test?id={test_id}")
+        html = await self._get(f"{self.base_url()}/test?id={test_id}")
         soup = self._soup(html)
         return [int(i.text.split()[-1]) for i in soup.find_all("span", class_="prob_nums")]
 
-    async def get_theme_by_id(self, subject: Subject, theme_id: int) -> list[str | int]:
+    @handle_params
+    async def get_theme_by_id(self, theme_id: int) -> list[str | int]:
         problem_ids = []
         page = 1
         while True:
             params = {"theme": theme_id, "page": page}
             logging.info(f"Getting theme {theme_id}, page={page}")
-            html = await self._get(f"{self.base_url(subject)}/test", params=params)
+            html = await self._get(f"{self.base_url()}/test", params=params)
             soup = self._soup(html)
             ids = soup.find_all("span", class_="prob_nums")
             if not ids:
@@ -206,14 +230,13 @@ class SdamGIA:
             page += 1
         return problem_ids
 
-    async def get_catalog(self, subject: Subject) -> list[dict[str, Any]]:
+    @handle_params
+    async def get_catalog(self) -> list[dict[str, Any]]:
         """
         Получение каталога заданий для определенного предмета
-
-        :param subject: Наименование предмета
         """
 
-        html = await self._get(f"{self.base_url(subject)}/prob_catalog")
+        html = await self._get(f"{self.base_url()}/prob_catalog")
         soup = self._soup(html)
         catalog = []
         catalog_result = []
@@ -251,11 +274,10 @@ class SdamGIA:
 
         return catalog_result
 
-    async def generate_test(self, subject: Subject, problems: dict[str, int] | None = None) -> str:
+    @handle_params
+    async def generate_test(self, problems: dict[str, int] | None = None) -> str:
         """
         Генерирует тест по заданным параметрам
-
-        :param subject: Наименование предмета
 
         :param problems: Список заданий
         По умолчанию генерируется тест, включающий по одной задаче из каждого задания предмета.
@@ -270,8 +292,7 @@ class SdamGIA:
 
         if "full" in problems:
             params = {
-                f"prob{i}": problems["full"]
-                for i in range(1, len(await self.get_catalog(subject)) + 1)
+                f"prob{i}": problems["full"] for i in range(1, len(await self.get_catalog()) + 1)
             }
         else:
             params = {f"prob{i}": problems[i] for i in problems}
@@ -279,7 +300,7 @@ class SdamGIA:
         return (
             (
                 await self._session.get(
-                    f"{self.base_url(subject)}/test?a=generate",
+                    f"{self.base_url()}/test?a=generate",
                     params=params,
                     allow_redirects=False,
                 )
@@ -289,9 +310,9 @@ class SdamGIA:
             .split("&nt")[0]
         )
 
+    @handle_params
     async def generate_pdf(
         self,
-        subject: Subject,
         test_id: int,
         solution: bool = False,
         nums: bool = False,
@@ -306,7 +327,6 @@ class SdamGIA:
         """
         Генерирует pdf версию теста
 
-        :param subject: Наименование предмета
         :param test_id: Идентифигатор теста
         :param solution: Пояснение
         :param nums: № заданий
@@ -338,10 +358,10 @@ class SdamGIA:
         }
 
         return urljoin(
-            self.base_url(subject),
+            self.base_url(),
             (
                 await self._session.get(
-                    f"{self.base_url(subject)}/test", params=params, allow_redirects=False
+                    f"{self.base_url()}/test", params=params, allow_redirects=False
                 )
             ).headers["location"],
         )
