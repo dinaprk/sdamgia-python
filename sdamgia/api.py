@@ -51,72 +51,9 @@ class SdamgiaAPI:
         self._session = session or aiohttp.ClientSession()
         self._latex_ocr_model = None
 
-    async def __aenter__(self) -> Self:
-        return self
-
-    async def __aexit__(
-        self,
-        exc_type: type[BaseException] | None,
-        exc_value: BaseException | None,
-        traceback: TracebackType | None,
-    ) -> None:
-        if not self._session.closed:
-            await self._session.close()
-
-    async def _get(self, path: str = "", url: str = "", **kwargs: Any) -> str:
-        """Get html from full :var:`url` or :var:`path` relative to base url"""
-        url = url or urljoin(self.base_url, path)
-        async with self._session.request(method="GET", url=url, **kwargs) as response:
-            logging.debug(f"Sent GET request: {response.status}: {response.url}")
-            response.raise_for_status()
-            return await response.text()
-
-    @staticmethod
-    def _soup(html: str) -> bs4.BeautifulSoup:
-        return bs4.BeautifulSoup(markup=html, features="lxml")
-
     @property
     def base_url(self) -> str:
         return f"https://{self.subject}-{self.gia_type}.{BASE_DOMAIN}"
-
-    async def _fetch_svg(self, url: str) -> ImageType:
-        byte_string = await self._get(url=url)
-        png_bytes = svg2png(bytestring=byte_string)
-        buffer = io.BytesIO(png_bytes)
-        return Image.open(buffer)
-
-    def _recognize_image_text(self, image: ImageType) -> str:
-        if self._latex_ocr_model is None:
-            try:
-                from pix2tex.cli import LatexOCR
-
-                self._latex_ocr_model = LatexOCR()
-            except ImportError:
-                raise RuntimeError("'pix2tex' is required for this functional but not found")
-        return f"${self._latex_ocr_model(image)}$"  # type: ignore[misc]
-
-    async def _get_problem_part(self, tag: bs4.Tag, recognize_text: bool = False) -> ProblemPart:
-        image_tags = tag.find_all("img", class_="tex")
-        image_urls = [img_tag.get("src") for img_tag in image_tags]
-
-        if recognize_text:
-            images = await asyncio.gather(
-                *[asyncio.create_task(self._fetch_svg(url)) for url in image_urls]
-            )
-
-            for img_tag, image in zip(image_tags, images):
-                img_tag.replace_with(self._recognize_image_text(image))
-
-            text = tag.get_text(strip=True).replace("−", "-").replace("\xad", "")
-            text = unicodedata.normalize("NFKC", text)
-        else:
-            text = ""
-
-        for img_tag in tag.find_all("img"):
-            if (url := img_tag.get("src")) not in image_urls:
-                image_urls.append(url)
-
-        return ProblemPart(text=text, html=str(tag), image_urls=image_urls)
 
     @_handle_params
     async def get_problem(
@@ -174,25 +111,6 @@ class SdamgiaAPI:
             topic_id=topic_id,
             analog_ids=analog_ids,
         )
-
-    @staticmethod
-    def _get_problem_ids(tag: bs4.Tag) -> list[int]:
-        return [int(span.find("a").text) for span in tag.find_all("span", class_="prob_nums")]
-
-    async def _get_problem_ids_pagination(self, path: str, params: dict[str, Any]) -> list[int]:
-        result: list[int] = []
-        page = 1
-        while True:
-            params |= {"page": page}
-            soup = self._soup(await self._get(path, params=params))
-            if not (ids := self._get_problem_ids(soup)):
-                return result
-            for id in ids:
-                # to prevent bug when site infinitely returns last results page
-                if id in result:
-                    return result
-                result.append(id)
-            page += 1
 
     @_handle_params
     async def search(self, query: str) -> list[int]:
@@ -336,3 +254,85 @@ class SdamgiaAPI:
                 )
             ).headers["location"],
         )
+
+    async def __aenter__(self) -> Self:
+        return self
+
+    async def __aexit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_value: BaseException | None,
+        traceback: TracebackType | None,
+    ) -> None:
+        if not self._session.closed:
+            await self._session.close()
+
+    async def _get(self, path: str = "", url: str = "", **kwargs: Any) -> str:
+        """Get html from full :var:`url` or :var:`path` relative to base url"""
+        url = url or urljoin(self.base_url, path)
+        async with self._session.request(method="GET", url=url, **kwargs) as response:
+            logging.debug(f"Sent GET request: {response.status}: {response.url}")
+            response.raise_for_status()
+            return await response.text()
+
+    @staticmethod
+    def _soup(html: str) -> bs4.BeautifulSoup:
+        return bs4.BeautifulSoup(markup=html, features="lxml")
+
+    async def _fetch_svg(self, url: str) -> ImageType:
+        byte_string = await self._get(url=url)
+        png_bytes = svg2png(bytestring=byte_string)
+        buffer = io.BytesIO(png_bytes)
+        return Image.open(buffer)
+
+    def _recognize_image_text(self, image: ImageType) -> str:
+        if self._latex_ocr_model is None:
+            try:
+                from pix2tex.cli import LatexOCR
+
+                self._latex_ocr_model = LatexOCR()
+            except ImportError:
+                raise RuntimeError("'pix2tex' is required for this functional but not found")
+        return f"${self._latex_ocr_model(image)}$"  # type: ignore[misc]
+
+    async def _get_problem_part(self, tag: bs4.Tag, recognize_text: bool = False) -> ProblemPart:
+        image_tags = tag.find_all("img", class_="tex")
+        image_urls = [img_tag.get("src") for img_tag in image_tags]
+
+        if recognize_text:
+            images = await asyncio.gather(
+                *[asyncio.create_task(self._fetch_svg(url)) for url in image_urls]
+            )
+
+            for img_tag, image in zip(image_tags, images):
+                img_tag.replace_with(self._recognize_image_text(image))
+
+            text = tag.get_text(strip=True).replace("−", "-").replace("\xad", "")
+            text = unicodedata.normalize("NFKC", text)
+        else:
+            text = ""
+
+        for img_tag in tag.find_all("img"):
+            if (url := img_tag.get("src")) not in image_urls:
+                image_urls.append(url)
+
+        return ProblemPart(text=text, html=str(tag), image_urls=image_urls)
+
+    @staticmethod
+    def _get_problem_ids(tag: bs4.Tag) -> list[int]:
+        return [int(span.find("a").text) for span in tag.find_all("span", class_="prob_nums")]
+
+    async def _get_problem_ids_pagination(self, path: str, params: dict[str, Any]) -> list[int]:
+        result: list[int] = []
+        page = 1
+        while True:
+            params |= {"page": page}
+            soup = self._soup(await self._get(path, params=params))
+            if not (ids := self._get_problem_ids(soup)):
+                return result
+            for id in ids:
+                # to prevent bug when site infinitely returns last results page
+                if id in result:
+                    return result
+                result.append(id)
+            page += 1
