@@ -12,8 +12,7 @@ license = "LGPLv3+"
 [tool.poetry.dependencies]
 python = "^3.10"
 aiohttp = "^3.8.4"
-beautifulsoup4 = "^4.12.2"
-lxml = "^5.1.1"
+selectolax = "^0.3.21"
 pillow = "^10.2.0"
 cairosvg = "^2.7.0"
 
@@ -79,5 +78,5 @@ exclude = [
 ]
 
 [[tool.mypy.overrides]]
-module = "pix2tex.*,cairosvg.*,bs4.*"
+module = "pix2tex.*,cairosvg.*"
 ignore_missing_imports = true
