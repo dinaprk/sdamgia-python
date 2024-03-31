@@ -1,14 +1,14 @@
 .POSIX:
 
-project_dir := .
+PROJECT_DIR := .
 
 lint:
-	@poetry run ruff format --check --diff $(project_dir)
-	@poetry run ruff check $(project_dir)
-	@poetry run mypy $(project_dir)
+	@poetry run ruff format --check --diff $(PROJECT_DIR)
+	@poetry run ruff check $(PROJECT_DIR)
+	@poetry run mypy $(PROJECT_DIR)
 
-reformat:
-	@poetry run ruff format $(project_dir)
-	@poetry run ruff check --fix $(project_dir)
+format:
+	@poetry run ruff format $(PROJECT_DIR)
+	@poetry run ruff check --fix $(PROJECT_DIR)
 
-.PHONY: lint, reformat
+.PHONY: lint, format

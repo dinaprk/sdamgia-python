@@ -24,7 +24,7 @@ def create_pdf_from_html(html: str, output_file_path: str) -> None:
 
 def create_problem_pdf_html(problem: Problem) -> None:
     create_pdf_from_html(
-        html=f"<b>Условие:</b>{problem.condition.html}{problem.solution.html}",
+        html=f"<b>Условие:</b>{problem.condition.html}{problem.solution.html}",  # type: ignore[union-attr]
         output_file_path=f"{problem.subject}-{problem.gia_type}-{problem.problem_id}.pdf",
     )
 
@@ -39,7 +39,7 @@ def create_problem_pdf_tex(problem: Problem) -> None:
         "\\begin{document}\n"
         f"\\section{{\\href{{{problem.problem_id}}}{{{problem.url}}}\n\n"
         "\\subsection{Условие:}\n\n"
-        f"{problem.condition.text}\n\n"
+        f"{problem.condition.text}\n\n"  # type: ignore[union-attr]
         "\\subsection{Решение:}\n\n"
         f"{problem.solution.text}\n\n"
         "\\end{document}"

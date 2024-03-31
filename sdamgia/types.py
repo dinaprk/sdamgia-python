@@ -29,7 +29,7 @@ class Subject(StrEnum):
 class ProblemPart:
     text: str
     html: str
-    image_links: list[str]
+    image_urls: list[str]
 
 
 @dataclass
@@ -45,7 +45,7 @@ class Problem:
 
     @property
     def url(self) -> str:
-        return (
-            f"https://{self.subject.value}-{self.gia_type.value}.sdamgia.ru"
-            f"/problem?id={self.problem_id}"
-        )
+        return f"https://{self.subject}-{self.gia_type}.{BASE_DOMAIN}/problem?id={self.problem_id}"
+
+
+BASE_DOMAIN = "sdamgia.ru"

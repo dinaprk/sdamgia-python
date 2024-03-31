@@ -14,10 +14,10 @@ from cairosvg import svg2png
 from PIL import Image
 from PIL.Image import Image as ImageType
 
-from .types import GitType, Problem, ProblemPart, Subject
+from .types import BASE_DOMAIN, GitType, Problem, ProblemPart, Subject
 
 
-def handle_params(method: Callable[..., Any]) -> Callable[..., Any]:
+def _handle_params(method: Callable[..., Any]) -> Callable[..., Any]:
     """Handle :var:`gia_type` and :var:`subject` params"""
 
     async def wrapper(self: Any, *args: Any, **kwargs: Any) -> Any:
@@ -39,13 +39,11 @@ def handle_params(method: Callable[..., Any]) -> Callable[..., Any]:
     return wrapper
 
 
-class SdamGIA:
-    BASE_DOMAIN = "sdamgia.ru"
-
+class SdamgiaAPI:
     def __init__(
         self,
         gia_type: GitType = GitType.EGE,
-        subject: Subject | None = None,
+        subject: Subject = Subject.MATH,
         session: aiohttp.ClientSession | None = None,
     ):
         self.gia_type = gia_type
@@ -79,15 +77,15 @@ class SdamGIA:
 
     @property
     def base_url(self) -> str:
-        return f"https://{self.subject}-{self.gia_type}.{self.BASE_DOMAIN}"
+        return f"https://{self.subject}-{self.gia_type}.{BASE_DOMAIN}"
 
-    async def get_image_from_url(self, url: str) -> ImageType:
+    async def _fetch_svg(self, url: str) -> ImageType:
         byte_string = await self._get(url=url)
         png_bytes = svg2png(bytestring=byte_string)
         buffer = io.BytesIO(png_bytes)
         return Image.open(buffer)
 
-    def image_to_tex(self, image: ImageType) -> str:
+    def _recognize_image_text(self, image: ImageType) -> str:
         if self._latex_ocr_model is None:
             try:
                 from pix2tex.cli import LatexOCR
@@ -97,51 +95,47 @@ class SdamGIA:
                 raise RuntimeError("'pix2tex' is required for this functional but not found")
         return f"${self._latex_ocr_model(image)}$"  # type: ignore[misc]
 
-    async def get_latex_from_url_list(self, image_links: list[str]) -> dict[str, str]:
-        condition_image_tasks = [
-            asyncio.create_task(self.get_image_from_url(url)) for url in image_links
-        ]
-        images_data: tuple[ImageType] = await asyncio.gather(*condition_image_tasks)
-        string_tex_list = tuple(map(self.image_to_tex, images_data))
-        return dict(zip(image_links, string_tex_list))
-
     async def _get_problem_part(self, tag: bs4.Tag, recognize_text: bool = False) -> ProblemPart:
-        image_links = [img.get("src") for img in tag.find_all("img", class_="tex")]
+        image_tags = tag.find_all("img", class_="tex")
+        image_urls = [img_tag.get("src") for img_tag in image_tags]
 
         if recognize_text:
-            # replace images with recognized tex source code
-            recognized_texts = await self.get_latex_from_url_list(image_links)
-            for img_tag in tag.find_all("img", class_="tex"):
-                img_tag.replace_with(recognized_texts.get(img_tag.get("src")))
+            images = await asyncio.gather(
+                *[asyncio.create_task(self._fetch_svg(url)) for url in image_urls]
+            )
+
+            for img_tag, image in zip(image_tags, images):
+                img_tag.replace_with(self._recognize_image_text(image))
 
             text = tag.get_text(strip=True).replace("−", "-").replace("\xad", "")
             text = unicodedata.normalize("NFKC", text)
         else:
             text = ""
 
-        for img in tag.find_all("img"):
-            if (link := img.get("src")) is not None and link not in image_links:
-                image_links.append(link)
+        for img_tag in tag.find_all("img"):
+            if (url := img_tag.get("src")) not in image_urls:
+                image_urls.append(url)
 
-        return ProblemPart(text=text, html=str(tag), image_links=image_links)
+        return ProblemPart(text=text, html=str(tag), image_urls=image_urls)
 
-    @handle_params
-    async def get_problem_by_id(
+    @_handle_params
+    async def get_problem(
         self,
         problem_id: int,
         recognize_text: bool = False,
     ) -> Problem:
         soup = self._soup(await self._get(f"/problem?id={problem_id}"))
 
-        if (problem_block := soup.find("div", class_="prob_maindiv")) is None:
-            raise RuntimeError("Problem block not found")
+        if (problem_tag := soup.find("div", class_="prob_maindiv")) is None:
+            raise RuntimeError("Problem tag not found")
 
-        for img in problem_block.find_all("img"):
-            if self.BASE_DOMAIN not in img["src"]:
-                img["src"] = urljoin(self.base_url, img["src"])
+        # make all image urls absolute
+        for img_tag in problem_tag.find_all("img"):
+            if BASE_DOMAIN not in img_tag["src"]:
+                img_tag["src"] = urljoin(self.base_url, img_tag["src"])
 
         try:
-            topic_id = int(problem_block.find("span", class_="prob_nums").text.split()[1])
+            topic_id = int(problem_tag.find("span", class_="prob_nums").text.split()[1])
         except (IndexError, AttributeError, ValueError):
             topic_id = None
 
@@ -152,19 +146,19 @@ class SdamGIA:
             condition = None
 
         try:
-            if (solution_tag := problem_block.find("div", class_="solution")) is None:
-                solution_tag = problem_block.find_all("div", class_="pbody")[1]
+            if (solution_tag := problem_tag.find("div", class_="solution")) is None:
+                solution_tag = problem_tag.find_all("div", class_="pbody")[1]
             solution = await self._get_problem_part(solution_tag, recognize_text=recognize_text)
         except (IndexError, AttributeError):
             solution = None
 
         try:
-            answer = problem_block.find("div", class_="answer").text.lstrip("Ответ:").strip()
+            answer = problem_tag.find("div", class_="answer").text.lstrip("Ответ:").strip()
         except (IndexError, AttributeError):
             answer = ""
 
         analog_urls = [
-            link.get("href") for link in problem_block.find("div", class_="minor").find_all("a")
+            link.get("href") for link in problem_tag.find("div", class_="minor").find_all("a")
         ]
         analog_ids = [
             int(mo.group(1)) for url in analog_urls if (mo := re.search(r"id=(\d+)", url))
@@ -181,59 +175,43 @@ class SdamGIA:
             analog_ids=analog_ids,
         )
 
-    @handle_params
+    @staticmethod
+    def _get_problem_ids(tag: bs4.Tag) -> list[int]:
+        return [int(span.find("a").text) for span in tag.find_all("span", class_="prob_nums")]
+
+    async def _get_problem_ids_pagination(self, path: str, params: dict[str, Any]) -> list[int]:
+        result: list[int] = []
+        page = 1
+        while True:
+            params |= {"page": page}
+            soup = self._soup(await self._get(path, params=params))
+            if not (ids := self._get_problem_ids(soup)):
+                return result
+            for id in ids:
+                # to prevent bug when site infinitely returns last results page
+                if id in result:
+                    return result
+                result.append(id)
+            page += 1
+
+    @_handle_params
     async def search(self, query: str) -> list[int]:
-        """
-        Поиск задач по запросу
+        """Поиск задач по запросу"""
+        return await self._get_problem_ids_pagination("/search", params={"search": query})
 
-        :param query: Запрос
-        """
-        problem_ids = []
-        page = 1
-        while True:
-            params = {"search": query, "page": page}
-            soup = self._soup(await self._get("/search", params=params))
-            ids = [int(i.text.split()[-1]) for i in soup.find_all("span", class_="prob_nums")]
-            if not ids:
-                break
-            problem_ids.extend(ids)
-            logging.debug(f"{page=}")
-            page += 1
-        logging.debug(f"total: {len(problem_ids)}")
-        return problem_ids
+    @_handle_params
+    async def get_theme(self, theme_id: int) -> list[int]:
+        return await self._get_problem_ids_pagination("/test", params={"theme": theme_id})
 
-    @handle_params
-    async def get_test_by_id(self, test_id: int) -> list[int]:
-        """
-        Получение списка задач, включенных в тест
-
-        :param test_id: Идентификатор теста
-        """
+    @_handle_params
+    async def get_test(self, test_id: int) -> list[int]:
+        """Получение списка задач, включенных в тест"""
         soup = self._soup(await self._get(f"/test?id={test_id}"))
-        return [int(i.text.split()[-1]) for i in soup.find_all("span", class_="prob_nums")]
+        return self._get_problem_ids(soup)
 
-    @handle_params
-    async def get_theme_by_id(self, theme_id: int) -> list[str | int]:
-        problem_ids = []
-        page = 1
-        while True:
-            params = {"theme": theme_id, "page": page}
-            logging.info(f"Getting theme {theme_id}, page={page}")
-            soup = self._soup(await self._get("/test", params=params))
-            ids = soup.find_all("span", class_="prob_nums")
-            if not ids:
-                break
-            ids = [i.find("a").text for i in ids]
-            problem_ids.extend(ids)
-            page += 1
-        return problem_ids
-
-    @handle_params
+    @_handle_params
     async def get_catalog(self) -> list[dict[str, Any]]:
-        """
-        Получение каталога заданий для определенного предмета
-        """
-
+        """Получение каталога заданий для определенного предмета"""
         soup = self._soup(await self._get("/prob_catalog"))
         topics = [
             c for c in soup.find_all("div", class_="cat_category") if c.get("data-id") is None
@@ -241,13 +219,6 @@ class SdamGIA:
         topics = topics[1:]  # skip header
 
         catalog = []
-        catalog_result = []
-
-        for i in soup.find_all("div", class_="cat_category"):
-            try:
-                i["data-id"]
-            except IndexError:
-                catalog.append(i)
         for topic in topics:
             topic_id, topic_name = topic.find("b", class_="cat_name").text.split(". ", maxsplit=1)
             additional = "д" in topic_id.lower()
@@ -260,10 +231,10 @@ class SdamGIA:
                     "additional": additional,
                     "categories": [
                         {
-                            "category_id": i["data-id"],
-                            "category_name": i.find("a", class_="cat_name").text,
+                            "category_id": int(cat_tag.get("data-id")),
+                            "category_name": cat_tag.find("a", class_="cat_name").text,
                         }
-                        for i in topic.find("div", class_="cat_children").find_all(
+                        for cat_tag in topic.find("div", class_="cat_children").find_all(
                             "div", class_="cat_category"
                         )
                     ],
@@ -272,8 +243,8 @@ class SdamGIA:
 
         return catalog
 
-    @handle_params
-    async def generate_test(self, problems: dict[str, int] | None = None) -> str:
+    @_handle_params
+    async def generate_test(self, problems: dict[int | str, int] | None = None) -> int:
         """
         Генерирует тест по заданным параметрам
 
@@ -285,13 +256,11 @@ class SdamGIA:
         {<номер задания>: <кол-во задач>, ... }
         """
 
-        if problems is None:
+        if not problems:
             problems = {"full": 1}
 
-        if "full" in problems:
-            params = {
-                f"prob{i}": problems["full"] for i in range(1, len(await self.get_catalog()) + 1)
-            }
+        if total := problems.get("full"):
+            params = {f"prob{i + 1}": total for i in range(len(await self.get_catalog()))}
         else:
             params = {f"prob{i}": problems[i] for i in problems}
 
@@ -302,54 +271,62 @@ class SdamGIA:
                 allow_redirects=False,
             )
         ).headers["location"]
-        return int(re.searc(r"id=(\d+)", path).group(1))  # type: ignore[union-attr]
+        return int(re.search(r"id=(\d+)", path).group(1))  # type: ignore[union-attr]
 
-    @handle_params
+    @_handle_params
     async def generate_pdf(
         self,
         test_id: int,
-        solution: bool = False,
-        nums: bool = False,
+        *,
+        solutions: bool = False,
+        problem_ids: bool = False,
         answers: bool = False,
-        key: bool = False,
-        crit: bool = False,
+        answers_table: bool = False,
+        criteria: bool = False,
         instruction: bool = False,
-        col: str = "",
-        tt: str = "",
-        pdf: Literal["h", "z", "m", ""] = "",
+        footer: str = "",
+        title: str = "",
+        pdf_type: Literal["h", "z", "m", "true"] = "true",
     ) -> str:
         """
         Генерирует pdf версию теста
 
         :param test_id: Идентифигатор теста
-        :param solution: Пояснение
-        :param nums: № заданий
+        :param solutions: Пояснение
+        :param problem_ids: № заданий
         :param answers: Ответы
-        :param key: Ключ
-        :param crit: Критерии
+        :param answers_table: Ключ
+        :param criteria: Критерии
         :param instruction: Инструкция
-        :param col: Нижний колонтитул
-        :param tt: Заголовок
-        :param pdf: Версия генерируемого pdf документа
+        :param footer: Нижний колонтитул
+        :param title: Заголовок
+        :param pdf_type: Версия генерируемого pdf документа
         По умолчанию генерируется стандартная вертикальная версия
         h - версия с большими полями
         z - версия с крупным шрифтом
         m - горизонтальная версия
+        true - версия по умолчанию
         """
+
+        def _format(var: bool) -> str:
+            return "true" if var else ""
 
         params = {
             "id": test_id,
             "print": "true",
-            "pdf": pdf,
-            "sol": str(solution),
-            "num": str(nums),
-            "ans": str(answers),
-            "key": str(key),
-            "crit": str(crit),
-            "pre": str(instruction),
-            "dcol": col,
-            "tt": tt,
+            "pdf": pdf_type,
+            "sol": _format(solutions),
+            "num": _format(problem_ids),
+            "ans": _format(answers),
+            "key": _format(answers_table),
+            "crit": _format(criteria),
+            "pre": _format(instruction),
+            "dcol": footer,
+            "tt": title,
         }
+        for key, value in params.copy().items():
+            if not value:
+                del params[key]
 
         return urljoin(
             self.base_url,
