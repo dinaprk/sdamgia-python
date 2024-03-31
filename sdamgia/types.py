@@ -41,7 +41,7 @@ class Problem:
     solution: ProblemPart | None
     answer: str
     topic_id: int | None
-    analogs: list[int]
+    analog_ids: list[int]
 
     @property
     def url(self) -> str:

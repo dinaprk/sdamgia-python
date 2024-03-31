@@ -1,6 +1,7 @@
 import asyncio
 import io
 import logging
+import re
 import unicodedata
 from collections.abc import Callable
 from types import TracebackType
@@ -162,12 +163,12 @@ class SdamGIA:
         except (IndexError, AttributeError):
             answer = ""
 
-        analogs = [
-            link["href"].replace("/problem?id=", "")
-            for link in problem_block.find("div", class_="minor").find_all("a")
-            if str(problem_id) not in link["href"]
+        analog_urls = [
+            link.get("href") for link in problem_block.find("div", class_="minor").find_all("a")
         ]
-        analogs = sorted([int(i) for i in analogs if i.isdigit()])
+        analog_ids = [
+            int(mo.group(1)) for url in analog_urls if (mo := re.search(r"id=(\d+)", url))
+        ]
 
         return Problem(
             gia_type=self.gia_type,
@@ -177,7 +178,7 @@ class SdamGIA:
             solution=solution,
             answer=answer,
             topic_id=topic_id,
-            analogs=analogs,
+            analog_ids=analog_ids,
         )
 
     @handle_params
@@ -234,6 +235,11 @@ class SdamGIA:
         """
 
         soup = self._soup(await self._get("/prob_catalog"))
+        topics = [
+            c for c in soup.find_all("div", class_="cat_category") if c.get("data-id") is None
+        ]
+        topics = topics[1:]  # skip header
+
         catalog = []
         catalog_result = []
 
@@ -242,20 +248,16 @@ class SdamGIA:
                 i["data-id"]
             except IndexError:
                 catalog.append(i)
+        for topic in topics:
+            topic_id, topic_name = topic.find("b", class_="cat_name").text.split(". ", maxsplit=1)
+            additional = "д" in topic_id.lower()
+            topic_id = int(re.search(r"\d+", topic_id).group())  # type: ignore[union-attr]
 
-        for topic in catalog[1:]:
-            topic_text = topic.find("b", class_="cat_name").text
-            topic_name = topic_text.split(". ")[1]
-            topic_id = topic_text.split(". ")[0]
-            if topic_id[0] == " ":
-                topic_id = topic_id[2:]
-            if topic_id.find("Задания ") == 0:
-                topic_id = topic_id.replace("Задания ", "")
-
-            catalog_result.append(
+            catalog.append(
                 {
                     "topic_id": topic_id,
                     "topic_name": topic_name,
+                    "additional": additional,
                     "categories": [
                         {
                             "category_id": i["data-id"],
@@ -268,7 +270,7 @@ class SdamGIA:
                 }
             )
 
-        return catalog_result
+        return catalog
 
     @handle_params
     async def generate_test(self, problems: dict[str, int] | None = None) -> str:
@@ -293,18 +295,14 @@ class SdamGIA:
         else:
             params = {f"prob{i}": problems[i] for i in problems}
 
-        return (
-            (
-                await self._session.get(
-                    f"{self.base_url}/test?a=generate",
-                    params=params,
-                    allow_redirects=False,
-                )
+        path = (
+            await self._session.get(
+                f"{self.base_url}/test?a=generate",
+                params=params,
+                allow_redirects=False,
             )
-            .headers["location"]
-            .split("id=")[1]
-            .split("&nt")[0]
-        )
+        ).headers["location"]
+        return int(re.searc(r"id=(\d+)", path).group(1))  # type: ignore[union-attr]
 
     @handle_params
     async def generate_pdf(
