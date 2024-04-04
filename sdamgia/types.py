@@ -3,11 +3,15 @@ from enum import StrEnum
 
 
 class GiaType(StrEnum):
+    """Represents GIA types."""
+
     OGE = "oge"
     EGE = "ege"
 
 
 class Subject(StrEnum):
+    """Represents subject types."""
+
     MATH = "math"
     MATH_BASE = "mathb"
     PHYSICS = "phys"
@@ -27,6 +31,8 @@ class Subject(StrEnum):
 
 @dataclass
 class ProblemPart:
+    """Represents problem part (condition or solution)."""
+
     text: str
     html: str
     image_urls: list[str]
@@ -34,6 +40,8 @@ class ProblemPart:
 
 @dataclass
 class Problem:
+    """Represents problem."""
+
     gia_type: GiaType
     subject: Subject
     problem_id: int
@@ -45,6 +53,7 @@ class Problem:
 
     @property
     def url(self) -> str:
+        """Get the URL of the problem."""
         return f"https://{self.subject}-{self.gia_type}.{BASE_DOMAIN}/problem?id={self.problem_id}"
 
 

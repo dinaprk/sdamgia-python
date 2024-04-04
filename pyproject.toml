@@ -51,6 +51,7 @@ select = [
     "I", # isort
     "N", # pep8-naming
     "S", # flake8-bandit
+    "D", # pydocstyle
     "C4", # flake8-comprehensions
     "UP", # pyupgrade
     "PLC", # pylint conventions
@@ -62,7 +63,13 @@ select = [
 ]
 ignore = [
     "S603", # subprocess-without-shell-equals-true
+    "D100", # undocumented-public-module
+    "D104", # undocumented-public-package
+    "D105", # undocumented-magic-method
 ]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
 
 [tool.mypy]
 strict = true

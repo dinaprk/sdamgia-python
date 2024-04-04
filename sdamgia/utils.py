@@ -5,6 +5,12 @@ from .types import Problem
 
 
 def create_pdf_from_html(html: str, output_file_path: str) -> None:
+    """Create a PDF file from HTML content.
+
+    Args:
+        html: The HTML content from which the PDF will be generated.
+        output_file_path: The path to save the generated PDF file.
+    """
     subprocess.Popen(
         [
             "/usr/bin/pandoc",
@@ -23,6 +29,7 @@ def create_pdf_from_html(html: str, output_file_path: str) -> None:
 
 
 def create_problem_pdf_html(problem: Problem) -> None:
+    """Create a PDF file from HTML representation of a problem."""
     create_pdf_from_html(
         html=f"<b>Условие:</b>{problem.condition.html}{problem.solution.html}",  # type: ignore[union-attr]
         output_file_path=f"{problem.subject}-{problem.gia_type}-{problem.problem_id}.pdf",
@@ -30,6 +37,7 @@ def create_problem_pdf_html(problem: Problem) -> None:
 
 
 def create_problem_pdf_tex(problem: Problem) -> None:
+    """Create a PDF file from LaTeX representation of a problem."""
     tex = (
         "\\documentclass{article}\n"
         "\\usepackage[T2A]{fontenc}\n\\usepackage[utf8]{inputenc}\n"

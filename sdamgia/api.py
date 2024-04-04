@@ -18,7 +18,7 @@ from .types import BASE_DOMAIN, GiaType, Problem, ProblemPart, Subject
 
 
 def _handle_params(method: Callable[..., Any]) -> Callable[..., Any]:
-    """Handle :var:`gia_type` and :var:`subject` params"""
+    """Handle `gia_type` and `subject` params."""
 
     async def wrapper(self: Any, *args: Any, **kwargs: Any) -> Any:
         save_gia_type = self.gia_type
@@ -40,12 +40,22 @@ def _handle_params(method: Callable[..., Any]) -> Callable[..., Any]:
 
 
 class SdamgiaAPI:
+    """Interface for SdamGIA public API."""
+
     def __init__(
         self,
         gia_type: GiaType = GiaType.EGE,
         subject: Subject = Subject.MATH,
+        *,
         session: aiohttp.ClientSession | None = None,
     ):
+        """Initialize the SdamgiaAPI with specified GIA type and subject.
+
+        Args:
+            gia_type: The GIA type to use in methods if unspecified.
+            subject: The subject to use in methods if unspecified.
+            session: An aiohttp client session to use for requests.
+        """
         self.gia_type = gia_type
         self.subject = subject
         self._session = session or aiohttp.ClientSession()
@@ -53,6 +63,7 @@ class SdamgiaAPI:
 
     @property
     def base_url(self) -> str:
+        """Get base site url for currently used GIA type and subject."""
         return f"https://{self.subject}-{self.gia_type}.{BASE_DOMAIN}"
 
     @_handle_params
@@ -61,6 +72,16 @@ class SdamgiaAPI:
         problem_id: int,
         recognize_text: bool = False,
     ) -> Problem:
+        """Fetch a problem by its ID.
+
+        Args:
+            problem_id: The ID of the problem to Fetch.
+            recognize_text: Whether to perform LaTeX OCR on the problem text.
+                Requires "pix2tex" extra.
+
+        Returns:
+            The problem fetched.
+        """
         parser = HTMLParser(await self._get(f"/problem?id={problem_id}"))
 
         if (problem_node := parser.css_first(".prob_maindiv")) is None:
@@ -115,22 +136,48 @@ class SdamgiaAPI:
 
     @_handle_params
     async def search(self, query: str) -> list[int]:
-        """Поиск задач по запросу"""
+        """Search problems by search query.
+
+        Args:
+            query: The search query to use.
+
+        Returns:
+            A list of IDs of problems what match search query.
+        """
         return await self._get_problem_ids_pagination("/search", params={"search": query})
 
     @_handle_params
     async def get_theme(self, theme_id: int) -> list[int]:
+        """Fetch a category theme by its ID.
+
+        Args:
+            theme_id: The ID of the theme to Fetch.
+
+        Returns:
+            A list of IDs of problems included in the theme.
+        """
         return await self._get_problem_ids_pagination("/test", params={"theme": theme_id})
 
     @_handle_params
     async def get_test(self, test_id: int) -> list[int]:
-        """Получение списка задач, включенных в тест"""
+        """Fetch a test by its ID.
+
+        Args:
+            test_id: The ID of the test to Fetch.
+
+        Returns:
+            A list of IDs of problem included in the test.
+        """
         parser = HTMLParser(await self._get(f"/test?id={test_id}"))
         return self._get_problem_ids(parser)
 
     @_handle_params
     async def get_catalog(self) -> list[dict[str, Any]]:
-        """Получение каталога заданий для определенного предмета"""
+        """Fetch a subject catalog.
+
+        Returns:
+            A list of topic dictionaries containing included categories.
+        """
         parser = HTMLParser(await self._get("/prob_catalog"))
         topics = [c for c in parser.css("div.cat_category") if c.attributes.get("data-id") is None]
         topics = topics[1:]  # skip header
@@ -159,18 +206,21 @@ class SdamgiaAPI:
         return catalog
 
     @_handle_params
-    async def generate_test(self, problems: dict[int | str, int] | None = None) -> int:
-        """
-        Генерирует тест по заданным параметрам
+    async def generate_test(self, problems: dict[int | Literal["full"], int] | None = None) -> int:
+        """Generate a test with a specified number of problems from selected categories.
 
-        :param problems: Список заданий
-        По умолчанию генерируется тест, включающий по одной задаче из каждого задания предмета.
-        Так же можно вручную указать одинаковое количество задач для каждогоиз заданий:
-        {'full': <кол-во задач>}
-        Указать определенные задания с определенным количеством задач для каждого:
-        {<номер задания>: <кол-во задач>, ... }
-        """
+        If none are passed, generates a test with one problem from each category.
 
+        Args:
+            problems: A dictionary specifying the number of problems to include for each category.
+                Should be formatted as follows: `{<category id>: <problems count>, ... }`.
+
+                Alternatively, you can specify the same number of problems for each category:
+                `{'full': <problems count>}`.
+
+        Returns:
+            The generated test ID.
+        """
         if not problems:
             problems = {"full": 1}
 
@@ -203,24 +253,27 @@ class SdamgiaAPI:
         title: str = "",
         pdf_type: Literal["h", "z", "m", "true"] = "true",
     ) -> str:
-        """
-        Генерирует pdf версию теста
+        """Generates a PDF version of the test.
 
-        :param test_id: Идентифигатор теста
-        :param solutions: Пояснение
-        :param problem_ids: № заданий
-        :param answers: Ответы
-        :param answers_table: Ключ
-        :param criteria: Критерии
-        :param instruction: Инструкция
-        :param footer: Нижний колонтитул
-        :param title: Заголовок
-        :param pdf_type: Версия генерируемого pdf документа
-        По умолчанию генерируется стандартная вертикальная версия
-        h - версия с большими полями
-        z - версия с крупным шрифтом
-        m - горизонтальная версия
-        true - версия по умолчанию
+        Args:
+            test_id: The identifier of the test.
+            solutions: Include explanations.
+            problem_ids: Include problem numbers.
+            answers: Include answers.
+            answers_table: Include answer key.
+            criteria: Include criteria.
+            instruction: Include instruction.
+            footer: The text for the footer.
+            title: The title of the test.
+            pdf_type: The type of the generated PDF document.
+
+                "h" - version with large margins.
+                "z" - version with large font.
+                "m" - horizontal version.
+                "true" - normal version (default).
+
+        Returns:
+            The URL of the generated PDF document.
         """
 
         def _format(var: bool) -> str:
@@ -265,7 +318,7 @@ class SdamgiaAPI:
             await self._session.close()
 
     async def _get(self, path: str = "", url: str = "", **kwargs: Any) -> str:
-        """Get html from full :var:`url` or :var:`path` relative to base url"""
+        """Get html from full `url` or `path` relative to base url."""
         url = url or urljoin(self.base_url, path)
         async with self._session.request(method="GET", url=url, **kwargs) as response:
             logging.debug(f"Sent GET request: {response.status}: {response.url}")
