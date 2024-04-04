@@ -14,7 +14,7 @@ from PIL import Image
 from PIL.Image import Image as ImageType
 from selectolax.parser import HTMLParser, Node
 
-from .types import BASE_DOMAIN, GitType, Problem, ProblemPart, Subject
+from .types import BASE_DOMAIN, GiaType, Problem, ProblemPart, Subject
 
 
 def _handle_params(method: Callable[..., Any]) -> Callable[..., Any]:
@@ -42,7 +42,7 @@ def _handle_params(method: Callable[..., Any]) -> Callable[..., Any]:
 class SdamgiaAPI:
     def __init__(
         self,
-        gia_type: GitType = GitType.EGE,
+        gia_type: GiaType = GiaType.EGE,
         subject: Subject = Subject.MATH,
         session: aiohttp.ClientSession | None = None,
     ):

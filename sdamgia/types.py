@@ -2,7 +2,7 @@ from dataclasses import dataclass
 from enum import StrEnum
 
 
-class GitType(StrEnum):
+class GiaType(StrEnum):
     OGE = "oge"
     EGE = "ege"
 
@@ -21,7 +21,7 @@ class Subject(StrEnum):
     RUSSIAN_LANGUAGE = "rus"
     ENGLISH_LANGUAGE = "en"
     GERMAN_LANGUAGE = "de"
-    FRANCH_LANGUAGE = "fr"
+    FRENCH_LANGUAGE = "fr"
     SPANISH_LANGUAGE = "sp"
 
 
@@ -34,7 +34,7 @@ class ProblemPart:
 
 @dataclass
 class Problem:
-    gia_type: GitType
+    gia_type: GiaType
     subject: Subject
     problem_id: int
     condition: ProblemPart | None
