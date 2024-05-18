@@ -53,12 +53,37 @@ sdamgia = { git = "https://github.com/dinaprk/sdamgia-api.git" }
 Because SdamgiaAPI client is asynchronous, it needs to be initialized in asynchronous context:
 
 ```python
+import asyncio
+import dataclasses
+import json
+
+from sdamgia import SdamgiaAPI
+from sdamgia.types import GiaType, Problem, Subject
+
+
+def problem_to_json(problem: Problem) -> str:
+    return json.dumps(dataclasses.asdict(problem), indent=4, ensure_ascii=False)
+
+
+async def main() -> None:
+    async with SdamgiaAPI(gia_type=GiaType.EGE, subject=Subject.MATH) as sdamgia:
+        problem_id = 26596
+        problem = await sdamgia.get_problem(problem_id, subject=Subject.MATH)
+        print(problem_to_json(problem))
+        print(problem.url)
+
+if __name__ == "__main__":
+    asyncio.run(main())
+```
+
+Or without context manager:
+
+```python
 from sdamgia import SdamgiaAPI
 from sdamgia.types import GiaType, Subject
 
-async with SdamgiaAPI(gia_type=GiaType.EGE, subject=Subject.MATH) as sdamgia:
-    problem_id = 26596
-    problem = sdamgia.get_problem(problem_id, subject=Subject.MATH)
-    print(problem)
-    print(problem.url)
+async def main() -> None:
+    sdamgia = SdamgiaAPI(gia_type=GiaType.EGE, subject=Subject.MATH)
+    # ... do something with client
+    await sdamgia.close()  # this line is mandatory
 ```

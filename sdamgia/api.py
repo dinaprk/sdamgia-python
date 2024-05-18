@@ -66,6 +66,10 @@ class SdamgiaAPI:
         """Get base site url for currently used GIA type and subject."""
         return f"https://{self.subject}-{self.gia_type}.{BASE_DOMAIN}"
 
+    async def close(self) -> None:
+        """Close current session."""
+        await self._session.close()
+
     @_handle_params
     async def get_problem(
         self,
@@ -314,8 +318,7 @@ class SdamgiaAPI:
         exc_value: BaseException | None,
         traceback: TracebackType | None,
     ) -> None:
-        if not self._session.closed:
-            await self._session.close()
+        await self.close()
 
     async def _get(self, path: str = "", url: str = "", **kwargs: Any) -> str:
         """Get html from full `url` or `path` relative to base url."""
