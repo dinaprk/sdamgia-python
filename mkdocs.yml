@@ -1,20 +1,11 @@
 site_name: SdamGIA API
-site_author: dinaprk
 site_description: Unofficial API for SdamGIA educational portal for exam preparation.
+site_author: dinaprk
+site_url: https://dinaprk.github.io/sdamgia-python
 
 repo_name: dinaprk/sdamgia-python
 repo_url: https://github.com/dinaprk/sdamgia-python
 edit_uri: edit/master/docs/
-
-nav:
-  - Index: "index.md"
-  - Reference:
-      - API: "reference/api.md"
-      - Types: "reference/types.md"
-
-watch:
-  - docs
-  - sdamgia
 
 theme:
   name: material
@@ -38,15 +29,41 @@ theme:
       primary: pink
       accent: pink
       toggle:
-        icon: material/brightness-7
+        icon: material/lightbulb-outline
         name: "Switch to dark mode"
     - media: "(prefers-color-scheme: dark)"
       scheme: slate
       primary: pink
       accent: pink
       toggle:
-        icon: material/brightness-4
+        icon: material/lightbulb
         name: "Switch to light mode"
+
+nav:
+  - Index: "index.md"
+  - Reference:
+      - API: "reference/api.md"
+      - Types: "reference/types.md"
+
+extra_css:
+  - "extra/tweaks.css"
+
+markdown_extensions:
+  - toc:
+      permalink: true
+      title: Page contents
+  - admonition
+  - pymdownx.highlight:
+      pygments_lang_class: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.extra
+  - pymdownx.superfences
+  - pymdownx.tabbed:
+      alternate_style: true
+
+watch:
+  - sdamgia
 
 plugins:
   - search
@@ -65,14 +82,3 @@ plugins:
           paths: [sdamgia]
           import:
             - https://docs.python.org/3/objects.inv
-
-markdown_extensions:
-  - toc:
-      permalink: true
-      title: Page contents
-  - admonition
-  - pymdownx.highlight
-  - pymdownx.inlinehilite
-  - pymdownx.snippets
-  - pymdownx.extra
-  - pymdownx.superfences
