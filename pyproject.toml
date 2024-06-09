@@ -11,23 +11,31 @@ license = "LGPLv3+"
 
 [tool.poetry.dependencies]
 python = "^3.10"
-aiohttp = "^3.8.4"
+aiohttp = "^3.9.5"
 selectolax = "^0.3.21"
 pillow = "^10.2.0"
 cairosvg = "^2.7.0"
 
+pix2tex = { version = "^0.1.2", extras = ["cli"], optional = true }
+
 [tool.poetry.extras]
 pix2tex = ["pix2tex"]
 
-[tool.poetry.dependencies.pix2tex]
+[tool.poetry.group.dev]
 optional = true
-version = "^0.1.2"
-extras = ["cli"]
 
 [tool.poetry.group.dev.dependencies]
 ruff = "^0.3.3"
 mypy = "^1.8.0"
 types-pillow = "^10.2.0"
+
+[tool.poetry.group.docs]
+optional = true
+
+[tool.poetry.group.docs.dependencies]
+mkdocs = "^1.6.0"
+mkdocs-material = "^9.5.23"
+mkdocstrings = { version = "^0.25.1", extras = ["python"] }
 
 [tool.ruff]
 target-version = "py310"
@@ -66,6 +74,7 @@ ignore = [
     "D100", # undocumented-public-module
     "D104", # undocumented-public-package
     "D105", # undocumented-magic-method
+    "D107", # undocumented-public-init
 ]
 
 [tool.ruff.lint.pydocstyle]
@@ -85,5 +94,5 @@ exclude = [
 ]
 
 [[tool.mypy.overrides]]
-module = "pix2tex.*,cairosvg.*"
+module = ["pix2tex.*", "cairosvg.*"]
 ignore_missing_imports = true

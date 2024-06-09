@@ -30,7 +30,7 @@ Currently, only installation from source is available.
 Installing the library with `pip` is quite simple:
 
 ```shell
-pip install git+https://github.com/dinaprk/sdamgia-api.git
+pip install git+https://github.com/dinaprk/sdamgia-python
 ```
 
 ### poetry
@@ -38,15 +38,19 @@ pip install git+https://github.com/dinaprk/sdamgia-api.git
 You can add `sdamgia` as a dependency with the following command:
 
 ```shell
-poetry add git+https://github.com/dinaprk/sdamgia-api.git
+poetry add git+https://github.com/dinaprk/sdamgia-python
 ```
 
 Or by directly specifying it in the configuration like so:
 
 ```toml
 [tool.poetry.dependencies]
-sdamgia = { git = "https://github.com/dinaprk/sdamgia-api.git" }
+sdamgia = { git = "https://github.com/dinaprk/sdamgia-python.git" }
 ```
+
+## Documentation
+
+You can find the documentation [here](https://dinaprk.github.io/sdamgia-python).
 
 ## Basic usage
 

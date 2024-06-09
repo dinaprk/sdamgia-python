@@ -40,7 +40,18 @@ def _handle_params(method: Callable[..., Any]) -> Callable[..., Any]:
 
 
 class SdamgiaAPI:
-    """Interface for SdamGIA public API."""
+    """Interface for SdamGIA public API.
+
+    !!! note
+        Every public method of this class has `gia_type` and `subject` parameters,
+        which can overwrite ones set on initialization. Those parameters are handled
+        with a special decorator and so do not have type hints.
+
+    Args:
+        gia_type: The GIA type to use in methods if unspecified.
+        subject: The subject to use in methods if unspecified.
+        session: An aiohttp client session to use for requests.
+    """
 
     def __init__(
         self,
@@ -49,13 +60,6 @@ class SdamgiaAPI:
         *,
         session: aiohttp.ClientSession | None = None,
     ):
-        """Initialize the SdamgiaAPI with specified GIA type and subject.
-
-        Args:
-            gia_type: The GIA type to use in methods if unspecified.
-            subject: The subject to use in methods if unspecified.
-            session: An aiohttp client session to use for requests.
-        """
         self.gia_type = gia_type
         self.subject = subject
         self._session = session or aiohttp.ClientSession()
@@ -65,10 +69,6 @@ class SdamgiaAPI:
     def base_url(self) -> str:
         """Get base site url for currently used GIA type and subject."""
         return f"https://{self.subject}-{self.gia_type}.{BASE_DOMAIN}"
-
-    async def close(self) -> None:
-        """Close current session."""
-        await self._session.close()
 
     @_handle_params
     async def get_problem(
@@ -199,7 +199,8 @@ class SdamgiaAPI:
                     "additional": additional,
                     "categories": [
                         {
-                            "category_id": int(cat_node.attributes["data-id"]),  # type: ignore[arg-type]
+                            "category_id": int(cat_node.attributes["data-id"]),
+                            # type: ignore[arg-type]
                             "category_name": cat_node.css_first("a.cat_name").text(),
                         }
                         for cat_node in topic.css_first("div.cat_children").css("div.cat_category")
@@ -308,6 +309,10 @@ class SdamgiaAPI:
                 )
             ).headers["location"],
         )
+
+    async def close(self) -> None:
+        """Close current session."""
+        await self._session.close()
 
     async def __aenter__(self) -> Self:
         return self
