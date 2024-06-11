@@ -37,7 +37,7 @@ def _base_url(gia_type: GiaType, subject: Subject) -> str:
     return f"https://{subject}-{gia_type}.{BASE_DOMAIN}"
 
 
-@dataclass
+@dataclass(frozen=True)
 class BaseType:
     """A base class for SdamGIA types."""
 
@@ -49,7 +49,7 @@ class BaseType:
         return _base_url(gia_type=self.gia_type, subject=self.subject)
 
 
-@dataclass
+@dataclass(frozen=True)
 class ProblemPart:
     """Represents problem part (condition or solution)."""
 
@@ -58,7 +58,7 @@ class ProblemPart:
     image_urls: list[str]
 
 
-@dataclass
+@dataclass(frozen=True)
 class Problem(BaseType):
     """Represents problem."""
 
@@ -75,7 +75,7 @@ class Problem(BaseType):
         return f"{self._base_url}/problem?id={self.id}"
 
 
-@dataclass
+@dataclass(frozen=True)
 class Category(BaseType):
     """Represents problems category."""
 
@@ -89,7 +89,7 @@ class Category(BaseType):
         return f"{self._base_url}/test?category_id={self.id}"
 
 
-@dataclass
+@dataclass(frozen=True)
 class Topic(BaseType):
     """Represents problems topic."""
 
