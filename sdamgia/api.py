@@ -364,7 +364,8 @@ class SdamgiaAPI:
             text = node.text(strip=True, deep=True)
             text = unicodedata.normalize("NFKC", text).replace("\xad", "")
         else:
-            text = ""
+            text = node.text(deep=True)
+            text = unicodedata.normalize("NFKC", text).replace("\xad", "")
 
         for img_node in node.css("img"):
             if (url := str(img_node.attributes["src"])) not in image_urls:
