@@ -5,7 +5,6 @@
 .tests/
 .env
 venv/
-poetry.lock
 
 # Cache
 __pycache__/
@@ -27,7 +26,6 @@ site/
 
 # Usage results
 images/
-*.db
 *.html
 *.svg
 *.png
