@@ -62,7 +62,8 @@ import dataclasses
 import json
 
 from sdamgia import SdamgiaAPI
-from sdamgia.types import GiaType, Problem, Subject
+from sdamgia.types import Problem
+from sdamgia.enums import GiaType, Subject
 
 
 def problem_to_json(problem: Problem) -> str:
@@ -76,6 +77,7 @@ async def main() -> None:
         print(problem_to_json(problem))
         print(problem.url)
 
+
 if __name__ == "__main__":
     asyncio.run(main())
 ```
@@ -84,7 +86,8 @@ Or without context manager:
 
 ```python
 from sdamgia import SdamgiaAPI
-from sdamgia.types import GiaType, Subject
+from sdamgia.enums import GiaType, Subject
+
 
 async def main() -> None:
     sdamgia = SdamgiaAPI(gia_type=GiaType.EGE, subject=Subject.MATH)

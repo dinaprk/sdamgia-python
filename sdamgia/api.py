@@ -14,7 +14,8 @@ from PIL import Image
 from PIL.Image import Image as ImageType
 from selectolax.parser import HTMLParser, Node
 
-from .types import BASE_DOMAIN, Catalog, Category, GiaType, Problem, ProblemPart, Subject, Topic
+from .enums import GiaType, Subject
+from .types import BASE_DOMAIN, Catalog, Category, Problem, ProblemPart, Topic
 from .utils import base_url
 
 
@@ -369,10 +370,9 @@ class SdamgiaAPI:
                 img_node.replace_with(self._recognize_image_text(image))
 
             text = node.text(strip=True, deep=True)
-            text = unicodedata.normalize("NFKC", text).replace("\xad", "")
         else:
             text = node.text(deep=True)
-            text = unicodedata.normalize("NFKC", text).replace("\xad", "")
+        text = unicodedata.normalize("NFKC", text).replace("\xad", "")
 
         for img_node in node.css("img"):
             if (url := str(img_node.attributes["src"])) not in image_urls:

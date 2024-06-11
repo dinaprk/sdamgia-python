@@ -1,7 +1,8 @@
 import os
 import subprocess
 
-from .types import GiaType, Problem, Subject, _base_url
+from .enums import GiaType, Subject
+from .types import Problem, _base_url
 
 
 def base_url(gia_type: GiaType, subject: Subject) -> str:

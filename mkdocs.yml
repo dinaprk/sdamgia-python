@@ -43,6 +43,7 @@ nav:
   - Index: "index.md"
   - API: "api.md"
   - Types: "types.md"
+  - Enums: "enums.md"
   - Utils: "utils.md"
 
 extra_css:
