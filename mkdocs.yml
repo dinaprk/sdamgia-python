@@ -41,9 +41,9 @@ theme:
 
 nav:
   - Index: "index.md"
-  - Reference:
-      - API: "reference/api.md"
-      - Types: "reference/types.md"
+  - API: "api.md"
+  - Types: "types.md"
+  - Utils: "utils.md"
 
 extra_css:
   - "extra/tweaks.css"

@@ -14,7 +14,8 @@ from PIL import Image
 from PIL.Image import Image as ImageType
 from selectolax.parser import HTMLParser, Node
 
-from .types import BASE_DOMAIN, GiaType, Problem, ProblemPart, Subject
+from .types import BASE_DOMAIN, Catalog, Category, GiaType, Problem, ProblemPart, Subject, Topic
+from .utils import base_url
 
 
 def _handle_params(method: Callable[..., Any]) -> Callable[..., Any]:
@@ -68,7 +69,7 @@ class SdamgiaAPI:
     @property
     def base_url(self) -> str:
         """Get base site url for currently used GIA type and subject."""
-        return f"https://{self.subject}-{self.gia_type}.{BASE_DOMAIN}"
+        return base_url(gia_type=self.gia_type, subject=self.subject)
 
     @_handle_params
     async def get_problem(
@@ -130,7 +131,7 @@ class SdamgiaAPI:
         return Problem(
             gia_type=self.gia_type,
             subject=self.subject,
-            problem_id=problem_id,
+            id=problem_id,
             condition=condition,
             solution=solution,
             answer=answer,
@@ -176,11 +177,11 @@ class SdamgiaAPI:
         return self._get_problem_ids(parser)
 
     @_handle_params
-    async def get_catalog(self) -> list[dict[str, Any]]:
+    async def get_catalog(self) -> Catalog:
         """Fetch a subject catalog.
 
         Returns:
-            A list of topic dictionaries containing included categories.
+            A list of topics containing included categories.
         """
         parser = HTMLParser(await self._get("/prob_catalog"))
         topics = [c for c in parser.css("div.cat_category") if c.attributes.get("data-id") is None]
@@ -188,24 +189,30 @@ class SdamgiaAPI:
 
         catalog = []
         for topic in topics:
-            topic_id_str, topic_name = topic.css_first("b.cat_name").text().split(". ", maxsplit=1)
-            additional = "д" in topic_id_str.lower()
-            topic_id = int(re.search(r"\d+", topic_id_str).group())  # type: ignore[union-attr]
+            topic_id_str, topic_name = topic.css_first("b.cat_name").text().split(".", maxsplit=1)
+            topic_name = topic_name.strip()
+            is_additional = "д" in topic_id_str.lower()
+            topic_number = int(re.search(r"\d+", topic_id_str).group())  # type: ignore[union-attr]
+            categories = [
+                Category(
+                    id=int(str(cat_node.attributes.get("data-id", -1))),
+                    name=cat_node.css_first("a.cat_name").text(),
+                    problems_count=int(cat_node.css_first("div.cat_count").text()),
+                    gia_type=self.gia_type,
+                    subject=self.subject,
+                )
+                for cat_node in topic.css_first("div.cat_children").css("div.cat_category")
+            ]
 
             catalog.append(
-                {
-                    "topic_id": topic_id,
-                    "topic_name": topic_name,
-                    "additional": additional,
-                    "categories": [
-                        {
-                            "category_id": int(cat_node.attributes["data-id"]),
-                            # type: ignore[arg-type]
-                            "category_name": cat_node.css_first("a.cat_name").text(),
-                        }
-                        for cat_node in topic.css_first("div.cat_children").css("div.cat_category")
-                    ],
-                }
+                Topic(
+                    number=topic_number,
+                    name=topic_name,
+                    is_additional=is_additional,
+                    categories=categories,
+                    gia_type=self.gia_type,
+                    subject=self.subject,
+                )
             )
 
         return catalog
