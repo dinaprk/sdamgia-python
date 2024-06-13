@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import asyncio
 import io
 import logging
@@ -5,7 +7,7 @@ import re
 import unicodedata
 from collections.abc import Callable
 from types import TracebackType
-from typing import Any, Literal, Self
+from typing import Any, Literal
 from urllib.parse import urljoin
 
 import aiohttp
@@ -322,7 +324,7 @@ class SdamgiaAPI:
         """Close current session."""
         await self._session.close()
 
-    async def __aenter__(self) -> Self:
+    async def __aenter__(self) -> SdamgiaAPI:
         return self
 
     async def __aexit__(

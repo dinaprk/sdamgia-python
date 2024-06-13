@@ -4,8 +4,8 @@ build-backend = "poetry.core.masonry.api"
 
 [tool.poetry]
 name = "sdamgia"
-version = "0.1.0"
-description = "Unofficial API for SdamGIA educational portal for exam preparation."
+version = "0.2.0"
+description = "Unofficial API for SdamGIA educational portal for exam preparation written in Python."
 authors = ["Динаzavr <dinaprk@cumallover.me>", "loneinheart <loneinheart@tfwno.gf>"]
 license = "LGPLv3+"
 

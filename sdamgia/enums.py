@@ -1,14 +1,14 @@
-from enum import StrEnum
+from enum import Enum
 
 
-class GiaType(StrEnum):
+class GiaType(str, Enum):
     """Represents GIA types."""
 
     OGE = "oge"
     EGE = "ege"
 
 
-class Subject(StrEnum):
+class Subject(str, Enum):
     """Represents subject types."""
 
     MATH = "math"
