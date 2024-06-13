@@ -7,7 +7,31 @@ name = "sdamgia"
 version = "0.2.0"
 description = "Unofficial API for SdamGIA educational portal for exam preparation written in Python."
 authors = ["Динаzavr <dinaprk@cumallover.me>", "loneinheart <loneinheart@tfwno.gf>"]
-license = "LGPLv3+"
+readme = "README.md"
+license = "LGPL-3.0-or-later"
+keywords = [
+    "sdamgia",
+    "api",
+    "asyncio",
+]
+classifiers = [
+    "License :: OSI Approved :: GNU Lesser General Public License v3 or later (LGPLv3+)",
+    "Development Status :: 4 - Beta",
+    "Environment :: Console",
+    "Framework :: AsyncIO",
+    "Intended Audience :: Developers",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Typing :: Typed",
+]
+
+[tool.poetry.urls]
+Documentation = "https://dinaprk.github.io/sdamgia-python"
+"Issue Tracker" = "https://github.com/dinaprk/sdamgia-python/issues"
+Repository = "https://github.com/dinaprk/sdamgia-python"
 
 [tool.poetry.dependencies]
 python = "^3.10"

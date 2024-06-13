@@ -1,25 +1,18 @@
-# SdamGIA API
+# 📚 SdamGIA API
 
-Unofficial API for SdamGIA educational portal for exam preparation.
+Unofficial API for SdamGIA educational portal for exam preparation written in Python.
 
-## Structure of the Site
+### ⚠️ Important Note
 
-To make it easier to understand how the SdamGIA problems database is structured, I suggest using the following scheme:
+This library retrieves data by parsing HTML because sdamgia uses server-side rendering, which
+is not very reliable, but the only method available at the moment. We strive to keep the API
+up to date to work as expected. However, if you encounter any issues,
+please [report them](https://github.com/dinaprk/sdamgia-python/issues).
 
-```
-SdamGIA
-└── GIA type, Subject
-    ├── Problem catalog
-    │   └── Topic
-    │       └── Category
-    │           └── Problem
-    └── Test
-        └── Problem
-```
+Use of this library is at your own risk. Sdamgia explicitly restricts parsing, and we do not
+take responsibility for any legal issues that arise from using this library.
 
-Each problem, test, theme or category has its own *unique* 32-bit integer ID.
-
-## Installing
+## 📦 Installing
 
 **Python 3.10 or above is required.**
 
@@ -33,26 +26,52 @@ Installing the library with `pip` is quite simple:
 pip install git+https://github.com/dinaprk/sdamgia-python
 ```
 
-### poetry
-
-You can add `sdamgia` as a dependency with the following command:
+Installing `sdamgia` with full problem text recognition support requires `pix2tex` extra, which
+can be installed like so:
 
 ```shell
-poetry add git+https://github.com/dinaprk/sdamgia-python
+pip install "git+https://github.com/dinaprk/sdamgia-python#egg=sdamgia[pix2tex]"
 ```
 
-Or by directly specifying it in the configuration like so:
+### poetry
+
+You can add `sdamgia` as a dependency by adding next lines to `pyproject.toml`:
 
 ```toml
 [tool.poetry.dependencies]
 sdamgia = { git = "https://github.com/dinaprk/sdamgia-python.git" }
 ```
 
-## Documentation
+With text recognition support:
+
+```toml
+[tool.poetry.dependencies]
+sdamgia = { git = "https://github.com/dinaprk/sdamgia-python", extras = ["pix2tex"] }
+```
+
+## 🗂️ Problems database structure
+
+To make it easier to understand how the SdamGIA problems database is structured, I suggest using
+the following scheme:
+
+```
+SdamGIA
+└── GIA type, Subject
+    ├── Problem catalog
+    │   └── Topic
+    │       └── Category
+    │           └── Problem
+    └── Test
+        └── Problem
+```
+
+Each problem, test, theme or category has its own *unique* integer ID.
+
+## 📃 Documentation
 
 You can find the documentation [here](https://dinaprk.github.io/sdamgia-python).
 
-## Basic usage
+## 🚀 Basic usage
 
 Because SdamgiaAPI client is asynchronous, it needs to be initialized in asynchronous context:
 
@@ -75,7 +94,7 @@ async def main() -> None:
         problem_id = 26596
         problem = await sdamgia.get_problem(problem_id, subject=Subject.MATH)
         print(problem_to_json(problem))
-        print(problem.url)
+        print(problem.url)  # https://math-ege.sdamgia.ru/problem?id=26596
 
 
 if __name__ == "__main__":
@@ -94,3 +113,7 @@ async def main() -> None:
     # ... do something with client
     await sdamgia.close()  # this line is mandatory
 ```
+
+## 📜 License
+
+This project is licensed under the LGPLv3+ license - see the [license file](LICENSE) for details.
