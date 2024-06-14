@@ -1,5 +1,11 @@
 # 📚 SdamGIA API
 
+[![License](https://img.shields.io/pypi/l/sdamgia?color=green&style=flat-square)](https://github.com/dinaprk/sdamgia-python/blob/master/LICENSE)
+[![Version](https://img.shields.io/pypi/v/sdamgia?style=flat-square)](https://pypi.org/project/sdamgia)
+[![Python Version](https://img.shields.io/pypi/pyversions/sdamgia?style=flat-square)](https://pypi.org/project/sdamgia)
+[![Status](https://img.shields.io/pypi/status/sdamgia?style=flat-square)](https://pypi.org/project/sdamgia)
+[![Documentation](https://img.shields.io/github/actions/workflow/status/dinaprk/sdamgia-python/docs.yml?label=docs&style=flat-square)](https://dinaprk.github.io/sdamgia-python)
+
 Unofficial API for SdamGIA educational portal for exam preparation written in Python.
 
 ### ⚠️ Important Note
@@ -16,37 +22,33 @@ take responsibility for any legal issues that arise from using this library.
 
 **Python 3.10 or above is required.**
 
-Currently, only installation from source is available.
-
 ### pip
 
 Installing the library with `pip` is quite simple:
 
 ```shell
-pip install git+https://github.com/dinaprk/sdamgia-python
+pip install -U sdamgia
 ```
 
-Installing `sdamgia` with full problem text recognition support requires `pix2tex` extra, which
-can be installed like so:
+For full problem text recognition support `pix2tex` extra is required,
+which can be installed like so:
 
 ```shell
-pip install "git+https://github.com/dinaprk/sdamgia-python#egg=sdamgia[pix2tex]"
+pip install -U "sdamgia[pix2tex]"
 ```
 
 ### poetry
 
-You can add `sdamgia` as a dependency by adding next lines to `pyproject.toml`:
+You can add the library as a dependency like so:
 
-```toml
-[tool.poetry.dependencies]
-sdamgia = { git = "https://github.com/dinaprk/sdamgia-python.git" }
+```shell
+poetry add sdamgia
 ```
 
-With text recognition support:
+With full text recognition support:
 
-```toml
-[tool.poetry.dependencies]
-sdamgia = { git = "https://github.com/dinaprk/sdamgia-python", extras = ["pix2tex"] }
+```shell
+poetry add sdamgia --extras pix2tex
 ```
 
 ## 🗂️ Problems database structure
@@ -116,4 +118,5 @@ async def main() -> None:
 
 ## 📜 License
 
-This project is licensed under the LGPLv3+ license - see the [license file](LICENSE) for details.
+This project is licensed under the LGPLv3+ license - see the
+[license file](https://github.com/dinaprk/sdamgia-python/blob/master/LICENSE) for details.
